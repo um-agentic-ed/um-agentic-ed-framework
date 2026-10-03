@@ -1,43 +1,84 @@
 (function () {
   "use strict";
 
-  // Shared File System Access API helper for Editor Mode saves. A single directory handle for
-  // /src/content is requested once per session (on first save) and reused after that.
+  // Shared File System Access API helper for Editor Mode saves. Editors choose the root folder of
+  // their App's Parent repository once per session (on first save). That choice is verified and
+  // narrowed to its src/content folder, which every other Editor path is relative to, so the
+  // Editor can only write inside the App's content.
   const CONTENT_ROOT_LABEL = "src/content";
   let rootHandlePromise = null;
+
+  async function getSubdirectory(parentHandle, name) {
+    try {
+      return await parentHandle.getDirectoryHandle(name);
+    } catch (error) {
+      if (error && error.name === "NotFoundError") return null;
+      throw error;
+    }
+  }
+
+  async function readRootFileText(rootFolderHandle, fileName) {
+    try {
+      const fileHandle = await rootFolderHandle.getFileHandle(fileName);
+      return await (await fileHandle.getFile()).text();
+    } catch (error) {
+      if (error && error.name === "NotFoundError") return null;
+      throw error;
+    }
+  }
 
   async function pickContentRoot() {
     const explainAndProceed = window.umedComponents && window.umedComponents.confirm
       ? window.umedComponents.confirm(
-          `Saving needs one-time access to this project's "${CONTENT_ROOT_LABEL}" folder. ` +
-          `In the next dialog, browse into your local copy of this project and select the ` +
-          `"${CONTENT_ROOT_LABEL}" folder itself (not the project root, and not a folder inside it), then choose it.`,
+          `Saving needs one-time access to this App's project folder. In the next dialog, ` +
+          `browse to your local copy of this App and select its root folder (the one that contains ` +
+          `"app.js", "index.html" and "src"), then choose it. Changes are only written inside ` +
+          `its "${CONTENT_ROOT_LABEL}" folder.`,
           { confirmLabel: "Choose folder\u2026", cancelLabel: "Cancel" }
         )
       : Promise.resolve(true);
 
     if (!(await explainAndProceed)) return null;
 
-    let handle;
+    let rootFolderHandle;
     try {
-      handle = await window.showDirectoryPicker({ id: "umed-content", mode: "readwrite" });
+      rootFolderHandle = await window.showDirectoryPicker({ id: "umed-app-root", mode: "readwrite" });
     } catch (error) {
       if (error && error.name === "AbortError") return null;
       throw error;
     }
 
-    if (handle.name !== "content") {
-      const useAnyway = window.umedComponents && window.umedComponents.confirm
+    const sourceHandle = await getSubdirectory(rootFolderHandle, "src");
+    const contentHandle = sourceHandle && await getSubdirectory(sourceHandle, "content");
+    if (!contentHandle) {
+      const pickAgain = window.umedComponents && window.umedComponents.confirm
         ? await window.umedComponents.confirm(
-            `You selected "${handle.name}", but this app expects the "${CONTENT_ROOT_LABEL}" folder. Use it anyway?`,
-            { confirmLabel: "Use this folder", cancelLabel: "Pick again" }
+            `You selected "${rootFolderHandle.name}", which does not contain a "${CONTENT_ROOT_LABEL}" folder. ` +
+            `Select the root folder of this App instead.`,
+            { confirmLabel: "Pick again", cancelLabel: "Cancel" }
           )
-        : true;
-      if (!useAnyway) return pickContentRoot();
+        : false;
+      return pickAgain ? pickContentRoot() : null;
     }
-    return handle;
-  }
 
+    // The root app.js declares the App's immutable appUuid, so a folder whose app.js lacks this
+    // App's UUID is probably a different App; confirm before writing into it.
+    const appUuid = window.umedAppIdentity && window.umedAppIdentity.appUuid;
+    if (appUuid) {
+      const rootAppScript = await readRootFileText(rootFolderHandle, "app.js");
+      if (rootAppScript === null || !rootAppScript.includes(appUuid)) {
+        const useAnyway = window.umedComponents && window.umedComponents.confirm
+          ? await window.umedComponents.confirm(
+              `The "app.js" in "${rootFolderHandle.name}" does not declare this App's appUuid, so this may be a ` +
+              `different App. Use it anyway?`,
+              { confirmLabel: "Use this folder", cancelLabel: "Pick again" }
+            )
+          : true;
+        if (!useAnyway) return pickContentRoot();
+      }
+    }
+    return contentHandle;
+  }
   async function getContentRootHandle() {
     if (!rootHandlePromise) rootHandlePromise = pickContentRoot();
     const handle = await rootHandlePromise;

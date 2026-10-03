@@ -98,7 +98,7 @@
   }
 
   function isSectionLanding() {
-    return Boolean(current && current.kind === "overview" && current.key.split("/").length === 2);
+    return Boolean(current && current.kind === "overview" && current.key.split("/").length === 3);
   }
   function isSlide() {
     return Boolean(current && current.kind === "slide");
@@ -1286,18 +1286,29 @@
     const deleteButton = document.createElement("button");
     deleteButton.type = "button";
     deleteButton.className = "delete-button";
-    if (deleteKind === "category") {
+    if (deleteKind === "subject") {
+      deleteButton.textContent = "Delete Subject";
+      const subject = findSubjectEntry(info.key);
+      deleteButton.disabled = !subject || (subject.categories || []).length > 0;
+    } else if (deleteKind === "category") {
       deleteButton.textContent = "Delete Category";
-      const category = findCategoryEntry(info.key);
+      const [subjectId, categoryId] = info.key.split("/");
+      const category = findCategoryEntry(subjectId, categoryId);
       deleteButton.disabled = !category || (category.sections || []).length > 0;
     } else if (deleteKind === "section") {
       deleteButton.textContent = "Delete Section";
-      const [categoryId, sectionId] = info.key.split("/");
-      const section = findSectionEntry(categoryId, sectionId);
+      const [subjectId, categoryId, sectionId] = info.key.split("/");
+      const section = findSectionEntry(subjectId, categoryId, sectionId);
       deleteButton.disabled = !section || (section.slides || []).length > 0;
-    } else {
+    } else if (deleteKind === "slide") {
       deleteButton.textContent = "Delete Slide";
-      deleteButton.disabled = deleteKind !== "slide";
+    } else {
+      // The App landing and error Slides can never be deleted; dashes mark the button as
+      // intentionally inert while keeping the toolbar layout stable.
+      deleteButton.textContent = "-----";
+      deleteButton.title = "This page cannot be deleted";
+      deleteButton.setAttribute("aria-label", "Delete is not available for this page");
+      deleteButton.disabled = true;
     }
     deleteButton.addEventListener("click", () => handleDelete(info, deleteButton, deleteKind));
     toolbar.append(deleteButton);
@@ -1341,34 +1352,29 @@
   }
 
   // The manifest duplicates titles used by sidebar/search and Slide navigation metadata. Every
-  // saved content object therefore reconciles the corresponding manifest record.
+  // saved content object therefore reconciles the corresponding manifest record. Keys are the
+  // content path: <subject>, <subject>/<category>, <subject>/<category>/<section>, or for a
+  // Slide <subject>/<category>/<section>/<slide>.
   function syncIndexEntry(key, data, kind) {
     const index = window.umedAppContentIndex;
     if (!index) return;
     const path = key.split("/");
-    if (kind === "overview" && path.length === 1) {
-      const category = (index.categories || []).find(item => item.id === path[0]);
-      if (category) category.title = data.title;
+    if (kind === "overview") {
+      const entry = path.length === 1 ? findSubjectEntry(path[0])
+        : path.length === 2 ? findCategoryEntry(path[0], path[1])
+        : path.length === 3 ? findSectionEntry(path[0], path[1], path[2])
+        : null;
+      if (entry) entry.title = data.title;
       return;
     }
-    if (kind === "overview" && path.length === 2) {
-      const category = (index.categories || []).find(item => item.id === path[0]);
-      const section = category && (category.sections || []).find(item => item.id === path[1]);
-      if (section) section.title = data.title;
-      return;
-    }
-    if (kind !== "slide") return;
-    for (const category of index.categories || []) {
-      for (const section of category.sections || []) {
-        const entry = (section.slides || []).find(slide => `${category.id}/${section.id}/${slide.id}` === key);
-        if (entry) {
-          entry.uuid = data.uuid;
-          entry.title = data.title;
-          entry.level = data.level;
-          entry.order = data.order;
-          return;
-        }
-      }
+    if (kind !== "slide" || path.length !== 4) return;
+    const section = findSectionEntry(path[0], path[1], path[2]);
+    const entry = section && (section.slides || []).find(slide => slide.id === path[3]);
+    if (entry) {
+      entry.uuid = data.uuid;
+      entry.title = data.title;
+      entry.level = data.level;
+      entry.order = data.order;
     }
   }
 
@@ -1412,9 +1418,9 @@
   // Writes updated order/level values (from window.umedAppContentIndex, already mutated by the
   // Slides menu's drag-and-drop handler in app.js) back to each affected Slide's own slide.js
   // file, keeping in-memory unsaved edits for any currently-open Slide intact.
-  async function writeSlideOrderFiles(rootHandle, categoryId, sectionId, slideIndexEntries) {
+  async function writeSlideOrderFiles(rootHandle, subjectId, categoryId, sectionId, slideIndexEntries) {
     for (const entry of slideIndexEntries) {
-      const key = `${categoryId}/${sectionId}/${entry.id}`;
+      const key = `${subjectId}/${categoryId}/${sectionId}/${entry.id}`;
       const src = `src/content/${key}/slide.js`;
       const data = await loadSlideContent(key, src);
       if (!data) continue;
@@ -1431,33 +1437,33 @@
     await window.umedEditorFS.writeTextFile(rootHandle, "content-index.js", indexContent);
   }
 
-  async function persistSlideOrder(categoryId, sectionId, slideIndexEntries) {
+  async function persistSlideOrder(subjectId, categoryId, sectionId, slideIndexEntries) {
     if (!window.umedEditorFS || !slideIndexEntries.length) return;
     const rootHandle = await window.umedEditorFS.getContentRootHandle();
     if (!rootHandle) return; // Editor cancelled the folder prompt; index stays updated in memory only.
 
-    await writeSlideOrderFiles(rootHandle, categoryId, sectionId, slideIndexEntries);
+    await writeSlideOrderFiles(rootHandle, subjectId, categoryId, sectionId, slideIndexEntries);
     await writeIndexFile(rootHandle);
   }
 
   // Creates a new Slide's slide.js file (initial content built by app.js's "+" button in the
   // Slides menu) and rewrites any other Slides whose order/level shifted to make room for it.
-  async function createSlide(categoryId, sectionId, data, otherChangedEntries) {
+  async function createSlide(subjectId, categoryId, sectionId, data, otherChangedEntries) {
     if (!window.umedEditorFS) throw new Error("File system access is unavailable.");
     const rootHandle = await window.umedEditorFS.getContentRootHandle();
     if (!rootHandle) throw new Error("Folder access was cancelled.");
 
-    const key = `${categoryId}/${sectionId}/${data.id}`;
+    const key = `${subjectId}/${categoryId}/${sectionId}/${data.id}`;
     data.contentUpdatedAt = new Date().toISOString();
     window.umedAppContent[key] = data;
     await window.umedEditorFS.writeTextFile(rootHandle, `${key}/slide.js`, serializeContentFile({ kind: "slide", key }, data));
-    await writeSlideOrderFiles(rootHandle, categoryId, sectionId, otherChangedEntries);
+    await writeSlideOrderFiles(rootHandle, subjectId, categoryId, sectionId, otherChangedEntries);
     await writeIndexFile(rootHandle);
   }
 
-  // Category/Section order, id, and title live only in content-index.js (their own category.js/
-  // section.js overview files just hold title/content), so reordering them from the sidebar only
-  // needs to rewrite that one file.
+  // Subject/Category/Section order, id, and title live only in content-index.js (their own
+  // subject.js/category.js/section.js landing files just hold title/content), so reordering them
+  // from the sidebar only needs to rewrite that one file.
   async function persistIndex() {
     if (!window.umedEditorFS) return;
     const rootHandle = await window.umedEditorFS.getContentRootHandle();
@@ -1465,14 +1471,14 @@
     await writeIndexFile(rootHandle);
   }
 
-  // Moves an entire Section between Category folders, including assets, trusted source files,
-  // Slides, and widgets. The copied JavaScript files are rekeyed before the manifest is saved;
-  // only then is the original folder removed. Unsaved content could not be represented by that
-  // disk copy, so require the Editor to save or discard it first.
-  async function moveSection(fromCategoryId, toCategoryId, sectionId) {
+  // Moves an entire Section between Category folders of one Subject, including assets, trusted
+  // source files, Slides, and widgets. The copied JavaScript files are rekeyed before the
+  // manifest is saved; only then is the original folder removed. Unsaved content could not be
+  // represented by that disk copy, so require the Editor to save or discard it first.
+  async function moveSection(subjectId, fromCategoryId, toCategoryId, sectionId) {
     if (!window.umedEditorFS) throw new Error("File system access is unavailable.");
-    const oldPrefix = `${fromCategoryId}/${sectionId}`;
-    const newPrefix = `${toCategoryId}/${sectionId}`;
+    const oldPrefix = `${subjectId}/${fromCategoryId}/${sectionId}`;
+    const newPrefix = `${subjectId}/${toCategoryId}/${sectionId}`;
     if ([...dirtyKeys].some(key => key === oldPrefix || key.startsWith(`${oldPrefix}/`))) {
       throw new Error("Save or discard changes in this Section before moving it.");
     }
@@ -1505,26 +1511,39 @@
     }
   }
 
-  // Creates a new Category's category.js overview file (from the sidebar's "+" button) and
+  // Creates a new Subject's subject.js landing file (from the Subject menu's "+" button) and
   // updates content-index.js, which app.js has already mutated in memory.
-  async function createCategory(categoryId, data) {
+  async function createSubject(subjectId, data) {
     if (!window.umedEditorFS) throw new Error("File system access is unavailable.");
     const rootHandle = await window.umedEditorFS.getContentRootHandle();
     if (!rootHandle) throw new Error("Folder access was cancelled.");
 
-    window.umedAppContent[categoryId] = data;
-    await window.umedEditorFS.writeTextFile(rootHandle, `${categoryId}/category.js`, serializeContentFile({ kind: "overview", key: categoryId }, data));
+    window.umedAppContent[subjectId] = data;
+    await window.umedEditorFS.writeTextFile(rootHandle, `${subjectId}/subject.js`, serializeContentFile({ kind: "overview", key: subjectId }, data));
+    await writeIndexFile(rootHandle);
+  }
+
+  // Creates a new Category's category.js overview file (from the sidebar's "+" button) and
+  // updates content-index.js, which app.js has already mutated in memory.
+  async function createCategory(subjectId, categoryId, data) {
+    if (!window.umedEditorFS) throw new Error("File system access is unavailable.");
+    const rootHandle = await window.umedEditorFS.getContentRootHandle();
+    if (!rootHandle) throw new Error("Folder access was cancelled.");
+
+    const key = `${subjectId}/${categoryId}`;
+    window.umedAppContent[key] = data;
+    await window.umedEditorFS.writeTextFile(rootHandle, `${key}/category.js`, serializeContentFile({ kind: "overview", key }, data));
     await writeIndexFile(rootHandle);
   }
 
   // Creates a new Section's section.js overview file (from the sidebar's "+" button) and updates
   // content-index.js, which app.js has already mutated in memory.
-  async function createSection(categoryId, sectionId, data) {
+  async function createSection(subjectId, categoryId, sectionId, data) {
     if (!window.umedEditorFS) throw new Error("File system access is unavailable.");
     const rootHandle = await window.umedEditorFS.getContentRootHandle();
     if (!rootHandle) throw new Error("Folder access was cancelled.");
 
-    const key = `${categoryId}/${sectionId}`;
+    const key = `${subjectId}/${categoryId}/${sectionId}`;
     window.umedAppContent[key] = data;
     await window.umedEditorFS.writeTextFile(rootHandle, `${key}/section.js`, serializeContentFile({ kind: "overview", key }, data));
     await writeIndexFile(rootHandle);
@@ -1581,55 +1600,64 @@
     if (window.umedApp && typeof window.umedApp.refreshSlide === "function") window.umedApp.refreshSlide();
   }
 
-  function findCategoryEntry(categoryId) {
+  function findSubjectEntry(subjectId) {
     const index = window.umedAppContentIndex;
-    return index && (index.categories || []).find(category => category.id === categoryId);
+    return index && (index.subjects || []).find(subject => subject.id === subjectId);
   }
 
-  function findSectionEntry(categoryId, sectionId) {
-    const category = findCategoryEntry(categoryId);
+  function findCategoryEntry(subjectId, categoryId) {
+    const subject = findSubjectEntry(subjectId);
+    return subject && (subject.categories || []).find(category => category.id === categoryId);
+  }
+
+  function findSectionEntry(subjectId, categoryId, sectionId) {
+    const category = findCategoryEntry(subjectId, categoryId);
     return category && (category.sections || []).find(section => section.id === sectionId);
   }
 
-  // Slides are always deletable. A Category/Section overview is only classified as a deletable
-  // kind here if it actually matches an index entry; the app overview and error Slide are also
-  // "overview"-kind but have no index entry, so they fall through to null and keep the Delete
-  // button disabled — the whole app can never be deleted. Whether the button is actually enabled
-  // (i.e. the Category/Section is empty) is decided separately in buildForm.
+  // Slides are always deletable. A Subject/Category/Section landing Slide is only classified as a
+  // deletable kind here if it actually matches an index entry; the app landing and error Slides
+  // are also "overview"-kind but fall through to null and keep the Delete button disabled, so the
+  // App itself can never be deleted. Whether the button is actually enabled (i.e. the Subject,
+  // Category or Section is empty) is decided separately in buildForm.
   function resolveDeleteKind(info) {
     if (info.kind === "slide") return "slide";
     if (info.kind !== "overview") return null;
     const segments = info.key.split("/");
-    if (segments.length === 1) return findCategoryEntry(info.key) ? "category" : null;
-    if (segments.length === 2) {
-      const [categoryId, sectionId] = segments;
-      return findSectionEntry(categoryId, sectionId) ? "section" : null;
-    }
+    if (segments.length === 1) return findSubjectEntry(info.key) ? "subject" : null;
+    if (segments.length === 2) return findCategoryEntry(...segments) ? "category" : null;
+    if (segments.length === 3) return findSectionEntry(...segments) ? "section" : null;
     return null;
   }
 
-  function removeIndexEntry(categoryId, sectionId, key) {
-    const section = findSectionEntry(categoryId, sectionId);
-    if (!section) return;
-    section.slides = (section.slides || []).filter(slide => `${categoryId}/${sectionId}/${slide.id}` !== key);
+  function removeSubjectIndexEntry(subjectId) {
+    const index = window.umedAppContentIndex;
+    if (!index) return;
+    index.subjects = (index.subjects || []).filter(subject => subject.id !== subjectId);
   }
 
-  function removeSectionIndexEntry(categoryId, sectionId) {
-    const category = findCategoryEntry(categoryId);
+  function removeIndexEntry(subjectId, categoryId, sectionId, key) {
+    const section = findSectionEntry(subjectId, categoryId, sectionId);
+    if (!section) return;
+    section.slides = (section.slides || []).filter(slide => `${subjectId}/${categoryId}/${sectionId}/${slide.id}` !== key);
+  }
+
+  function removeSectionIndexEntry(subjectId, categoryId, sectionId) {
+    const category = findCategoryEntry(subjectId, categoryId);
     if (!category) return;
     category.sections = (category.sections || []).filter(section => section.id !== sectionId);
   }
 
-  function removeCategoryIndexEntry(categoryId) {
-    const index = window.umedAppContentIndex;
-    if (!index) return;
-    index.categories = (index.categories || []).filter(category => category.id !== categoryId);
+  function removeCategoryIndexEntry(subjectId, categoryId) {
+    const subject = findSubjectEntry(subjectId);
+    if (!subject) return;
+    subject.categories = (subject.categories || []).filter(category => category.id !== categoryId);
   }
 
   async function handleDelete(info, button, deleteKind) {
     if (!deleteKind || !window.umedEditorFS) return;
     const data = window.umedAppContent[info.key];
-    const nounLabel = deleteKind === "category" ? "Category" : deleteKind === "section" ? "Section" : "Slide";
+    const nounLabel = { subject: "Subject", category: "Category", section: "Section" }[deleteKind] || "Slide";
     const confirmed = window.umedComponents && window.umedComponents.confirm
       ? await window.umedComponents.confirm(
           `Delete ${nounLabel} "${data ? data.title : info.key}"? This permanently removes its folder from disk and cannot be undone.`,
@@ -1656,15 +1684,19 @@
 
       let nextHash;
       if (deleteKind === "slide") {
-        const [categoryId, sectionId] = info.key.split("/");
-        removeIndexEntry(categoryId, sectionId, info.key);
-        nextHash = `#/${categoryId}/${sectionId}`;
+        const [subjectId, categoryId, sectionId] = info.key.split("/");
+        removeIndexEntry(subjectId, categoryId, sectionId, info.key);
+        nextHash = `#/${subjectId}/${categoryId}/${sectionId}`;
       } else if (deleteKind === "section") {
-        const [categoryId, sectionId] = info.key.split("/");
-        removeSectionIndexEntry(categoryId, sectionId);
-        nextHash = `#/${categoryId}`;
+        const [subjectId, categoryId, sectionId] = info.key.split("/");
+        removeSectionIndexEntry(subjectId, categoryId, sectionId);
+        nextHash = `#/${subjectId}/${categoryId}`;
+      } else if (deleteKind === "category") {
+        const [subjectId, categoryId] = info.key.split("/");
+        removeCategoryIndexEntry(subjectId, categoryId);
+        nextHash = `#/${subjectId}`;
       } else {
-        removeCategoryIndexEntry(info.key);
+        removeSubjectIndexEntry(info.key);
         nextHash = "#/";
       }
       await writeIndexFile(rootHandle);
@@ -1694,7 +1726,7 @@
   // Read-only-from-app.js's-perspective hook so the Slides menu's and sidebar's drag-and-drop
   // reordering and "+" add buttons can persist changes without duplicating file-serialization
   // logic.
-  window.umedEditor = { persistSlideOrder, createSlide, persistIndex, createCategory, createSection, moveSection };
+  window.umedEditor = { persistSlideOrder, createSlide, persistIndex, createSubject, createCategory, createSection, moveSection };
 
   if (window.umedApp && typeof window.umedApp.getCurrentSlideInfo === "function") {
     current = window.umedApp.getCurrentSlideInfo();

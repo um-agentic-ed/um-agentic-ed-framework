@@ -31,8 +31,10 @@ The app has three page states:
   the content pane while leaving the current route unchanged.
   - List actions and inputs in the editing pane allow in-app content editing with 
     immediate live updates in the Editor's browser whenever possible.
-  - Editors must give access to folder `/src/content` via the Chrome File System 
-    Access API to save permanent changes. 
+  - Editors must give access to the root folder of their App's Parent repository 
+    via the Chrome File System Access API to save permanent changes. The Editor 
+    checks that the folder contains `src/content` and that its `app.js` declares 
+    this App's `appUuid`, and then writes only inside `src/content`.
   - Editor Mode is only honored for `file:///` URLs and disabled when the app is
     served by a web file server.
   - Editor Mode is not secured; anyone can edit their local repository clone.
@@ -115,7 +117,10 @@ unless you are requested to change them. Use the existing codebase as your guide
 
 Hierarchical levels are reflected in the app:
 - Subjects are shown on the App landing Slide and switched via a popup menu in the 
-  header, to the right of the app title. The sidebar shows the Categories of the 
+  header, to the right of the app title. In Editor Mode that menu works like the 
+  Slides menu: hover "+" buttons between and around Subjects add a new Subject, 
+  and dragging reorders them. The Delete button on a landing Slide only enables 
+  for an empty Subject, Category or Section. The sidebar shows the Categories of the 
   current Subject, which stays selected on the App landing and error Slides.
 - The sidebar has:
     - A top-level entry for each Category in a Subject. Category Section 

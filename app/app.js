@@ -995,20 +995,120 @@
     renderSidebar();
   }
 
-  // The header menu lists every Subject; choosing one opens that Subject's landing Slide.
+  // The header menu lists every Subject; choosing one opens that Subject's landing Slide. In
+  // Editor mode it mirrors the Slides menu: each Subject is a draggable "chunk" (its link plus
+  // its own trailing spacer) in one Sortable.js list, and every spacer, including a leading one,
+  // shows a "+" button on hover to add a new Subject at that position.
+  let subjectMenuSortable = null;
+
   function renderSubjectMenu() {
     const subjects = sorted(index.subjects);
     const current = activeSubject();
-    subjectMenu.wrapper.hidden = !subjects.length;
+    const editing = isEditorUiActive();
+    if (subjectMenuSortable) {
+      subjectMenuSortable.destroy();
+      subjectMenuSortable = null;
+    }
+    subjectMenu.wrapper.hidden = !subjects.length && !editing;
     subjectMenu.label.textContent = current ? current.title : "Subjects";
     subjectMenu.popup.replaceChildren();
-    for (const subject of subjects) {
+
+    const createLink = subject => {
       const link = document.createElement("a");
       link.href = `#/${subject.id}`;
       link.setAttribute("role", "menuitem");
       link.setAttribute("aria-current", String(Boolean(current && current.id === subject.id)));
       link.textContent = subject.title;
-      subjectMenu.popup.append(link);
+      return link;
+    };
+    if (!editing) {
+      subjects.forEach(subject => subjectMenu.popup.append(createLink(subject)));
+      return;
+    }
+
+    subjectMenu.popup.append(createSubjectSpacer(0));
+    const list = document.createElement("div");
+    list.className = "subject-menu-list";
+    subjectMenu.popup.append(list);
+    subjects.forEach((subject, position) => {
+      const chunk = document.createElement("div");
+      chunk.className = "subject-menu-chunk";
+      chunk.dataset.subjectId = subject.id;
+      chunk.append(createLink(subject), createSubjectSpacer(position + 1));
+      list.append(chunk);
+    });
+    subjectMenuSortable = Sortable.create(list, {
+      animation: 150,
+      draggable: ".subject-menu-chunk",
+      ghostClass: "subject-menu-chunk--ghost",
+      chosenClass: "subject-menu-chunk--chosen",
+      dragClass: "subject-menu-chunk--drag",
+      onEnd(event) {
+        handleSubjectDrop(event.item.dataset.subjectId, event.newIndex);
+      }
+    });
+  }
+
+  function createSubjectSpacer(insertIndex) {
+    const spacer = document.createElement("div");
+    spacer.className = "subject-menu-spacer";
+    const addButton = document.createElement("button");
+    addButton.type = "button";
+    addButton.className = "subject-menu-add";
+    addButton.innerHTML = (window.umedIcons && window.umedIcons.add) || "+";
+    addButton.setAttribute("aria-label", "Add a Subject here");
+    addButton.addEventListener("click", () => handleAddSubject(insertIndex));
+    spacer.append(addButton);
+    return spacer;
+  }
+
+  // `insertIndex` is the moved Subject's resulting index among all Subjects, as for Categories.
+  function handleSubjectDrop(subjectId, insertIndex) {
+    const subject = index.subjects.find(item => item.id === subjectId);
+    if (!subject) return;
+
+    const siblings = sorted(index.subjects.filter(item => item.id !== subjectId));
+    const clampedIndex = Math.max(0, Math.min(insertIndex, siblings.length));
+    const assignedOrder = computeOrderForInsertion(siblings, clampedIndex);
+    if (assignedOrder !== null) {
+      subject.order = assignedOrder;
+    } else {
+      siblings.splice(clampedIndex, 0, subject);
+      rerankSiblings(siblings);
+    }
+
+    renderSubjectMenu();
+    persistIndexNow();
+  }
+
+  async function handleAddSubject(insertIndex) {
+    const title = window.umedComponents && window.umedComponents.promptText
+      ? await window.umedComponents.promptText("Title for the new Subject:", { confirmLabel: "Add Subject" })
+      : null;
+    if (!title) return;
+    const id = uniqueId(title, index.subjects.map(item => item.id));
+    const newSubject = { id, title, order: 0, categories: [] };
+
+    index.subjects.push(newSubject);
+    const siblings = sorted(index.subjects.filter(item => item.id !== id));
+    const clampedIndex = Math.max(0, Math.min(insertIndex, siblings.length));
+    const assignedOrder = computeOrderForInsertion(siblings, clampedIndex);
+    if (assignedOrder !== null) newSubject.order = assignedOrder;
+    else {
+      siblings.splice(clampedIndex, 0, newSubject);
+      rerankSiblings(siblings);
+    }
+    renderSubjectMenu();
+
+    const initialData = { schemaVersion: 1, title, content: { blocks: [{ type: "text", markdown: "" }] } };
+    if (window.umedEditor && typeof window.umedEditor.createSubject === "function") {
+      try {
+        await window.umedEditor.createSubject(id, initialData);
+        location.hash = `#/${id}`;
+      } catch (error) {
+        console.error(error);
+        alert(`Could not save the new Subject: ${error.message}`);
+      }
     }
   }
 

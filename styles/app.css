@@ -105,6 +105,15 @@ button { cursor: pointer; }
 .subject-menu-popup a { display: block; overflow: hidden; padding: .55rem; color: #005a9c; text-decoration: none; text-overflow: ellipsis; white-space: nowrap; }
 .subject-menu-popup a:hover { background: #f0f3f5; }
 .subject-menu-popup a[aria-current="true"] { font-weight: 700; color: var(--umed-brand-accent); }
+.subject-menu-list { display: flex; flex-direction: column; min-height: .5rem; gap: .15rem; }
+.subject-menu-chunk { border-radius: 4px; cursor: grab; }
+.subject-menu-chunk:active { cursor: grabbing; }
+.subject-menu-chunk--chosen { background: #f0f3f5; }
+.subject-menu-chunk--ghost { background: #d7e6f5; border: 1px dashed #005a9c; border-radius: 4px; opacity: .7; }
+.subject-menu-chunk--ghost a { visibility: hidden; }
+.subject-menu-chunk--drag { opacity: .85; }
+.subject-menu-spacer { position: relative; height: .6rem; margin: .2rem 0; }
+.subject-menu-spacer:only-child { height: 1.6rem; }
 .sidebar-hint { margin: 0; padding: .5rem 1rem; font-size: .9rem; }
 .header-actions { position: relative; display: flex; align-items: center; justify-content: flex-end; gap: .65rem; width: min(42vw, 430px); }
 .normal-header-navigation { display: flex; align-items: center; gap: .65rem; flex: 1 1 auto; min-width: 0; }
@@ -347,7 +356,8 @@ body.presenter-mode .slide-content .gpt-followups h2 { font-size: 1.1em; }
 .slide-menu-item:hover { background: #f0f3f5; }
 .slide-menu-item[aria-current="true"] { font-weight: 700; background: #eef3f6; }
 .slide-menu-spacer { position: relative; height: .6rem; margin: .2rem 0; }
-.slide-menu-add {
+.slide-menu-add,
+.subject-menu-add {
   position: absolute;
   top: 50%;
   left: 50%;
@@ -368,7 +378,8 @@ body.presenter-mode .slide-content .gpt-followups h2 { font-size: 1.1em; }
   transform: translate(-50%, -50%) scale(.6);
   transition: opacity .12s ease, transform .12s ease;
 }
-.slide-menu-spacer:hover .slide-menu-add, .slide-menu-add:focus-visible {
+.slide-menu-spacer:hover .slide-menu-add, .slide-menu-add:focus-visible,
+.subject-menu-spacer:hover .subject-menu-add, .subject-menu-add:focus-visible {
   opacity: 1;
   pointer-events: auto;
   transform: translate(-50%, -50%) scale(1);
