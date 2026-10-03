@@ -271,7 +271,7 @@ repository that wraps this instance of the `um-agentic-ed-framework` repository.
 
 ```text
 /                    Root of the `um-agentic-ed-parent` clone 
-  .github/prompts/   Agent prompts that describe common repeated tasks
+  .github/skills/    Agent skills (one folder each, with a SKILL.md) for common repeated tasks
   app.css            App-specific branding colors as CSS custom properties.
   app.js             Top-level App identity declared as window.umedAppIdentity.
   <app-target>.html  App HTML entrypoint, renamed as required by the App from index.html
@@ -294,7 +294,7 @@ repository that wraps this instance of the `um-agentic-ed-framework` repository.
   app/         Application bootstrap and global state
   components/  Shared UI components
   editor/      Files that support Editor mode
-  styles/      Bootstrap overrides and application styles
+  styles/      Application styles
 ```
 
 ## `/src/content/` file tree
@@ -415,11 +415,11 @@ type-specific fields:
   shown only in Editor mode, and never rendered in Learner Mode.
   - On an individual Slide, it directs generation or revision of that Slide's
     learner-facing content. Editors save the Slide, then run
-    [`fill-or-update-slide`](.github/prompts/fill-or-update-slide.prompt.md) with
+    [`fill-or-update-slide`](../../.github/skills/fill-or-update-slide/SKILL.md) with
     the Slide path.
   - On a Section landing Slide, it directs generation or revision of multiple
     child Slides across that Section. Editors save the Section, then run
-    [`fill-or-update-section`](.github/prompts/fill-or-update-section.prompt.md)
+    [`fill-or-update-section`](../../.github/skills/fill-or-update-section/SKILL.md)
     with the Section path.
   - The Agent uses all retained instructions blocks in order and leaves them
     unchanged unless explicitly asked to remove them.
@@ -525,6 +525,10 @@ window.umedAppContentIndex = {
   because an indexing pass runs.
 - The index does **not** duplicate full Slide `content`; only fields needed
   for navigation, routing, and search are present.
+- Subject ids become top-level folders in `src/content` and content keys, so
+  `assets`, `app-overview` and `routing-error` are reserved and must not
+  be used as Subject ids; Editor Mode adds a numeric suffix if a title would
+  produce one.
 - App identity (`appUuid`, `appName`) is not stored in the index; it is declared 
   in the Parent root `app.js` (see [App identity and branding](#app-identity-and-branding)).
 - `slides[].uuid` is the same immutable UUID stored in the corresponding
@@ -556,7 +560,7 @@ window.umedAppContentIndex = {
   Slide's `contentUpdatedAt`, generate the normalized `keywords` list required
   by [Searching](#searching), and
   set the matching index entry's `keywordsUpdatedAt` to the same timestamp.
-  The [`index-slides`](.github/prompts/index-slides.md) prompt performs this
+  The [`index-slides`](../../.github/skills/index-slides/SKILL.md) skill performs this
   maintenance in bulk and validates the disk/index relationship.
 - When an Editor uses in-app Editor mode to save a change that creates, edits, 
   reorder, or deletes a Slide, the app must update both the Slide's `slide.js` 
@@ -654,7 +658,7 @@ When generating content for a Section, you should:
   returns a `destroy()` callback used to tear the instance down when the
   Learner navigates away:
   ```js
-  window.umedAppWidgets['basic-genetics/dna-structure/base-pairs/interactive-plot'] = {
+  window.umedAppWidgets['getting-started/learning-basics/finding-your-way/navigating-slides/interactive-plot'] = {
     init(container) {
       const canvas = document.createElement('canvas');
       container.append(canvas);
@@ -663,9 +667,12 @@ When generating content for a Section, you should:
     }
   };
   ```
-  - `src/components/widget-host.js` is the only app code that loads
+  - `src/um-agentic-ed-framework/components/widget-host.js` is the only app code that loads
     `<widget>.js` files and calls `init`/`destroy`; it is shared, generic
     infrastructure and must not contain any per-widget logic.
+  - The Framework styles offer two optional helper classes for a widget's input
+    controls: wrap them in an element with class `widget-controls` (a wrapping
+    row) and give each labelled input a `widget-control` label.
   - `<widget>.js` files react only to their own HTML input controls (e.g. a
     slider rebuilding `chart.data` and calling `chart.update()`, or a
     Tabulator column header click). Widgets do not communicate with other
@@ -702,7 +709,7 @@ When generating content for a Section, you should:
     generated, so the Agent should confirm with the Editor before
     regenerating anyway, since nothing indicates the file needs it.
 - Editors prompt an Agent to create or update a `<widget>.js` file by running
-  [`create-or-update-widget`](.github/prompts/create-or-update-widget.prompt.md)
+  [`create-or-update-widget`](../../.github/skills/create-or-update-widget/SKILL.md)
   in VS Code chat, pointed at the target Slide and widget.
 
 ## DataFile content blocks
@@ -718,7 +725,7 @@ When generating content for a Section, you should:
   inline by a small upload icon button (the same icon used for the Editor
   pane's image upload button); clicking it opens a native file picker
   restricted to `extensions`. 
-- `src/components/data-files.js` is shared, generic infrastructure providing
+- `src/um-agentic-ed-framework/components/data-files.js` is shared, generic infrastructure providing
   `window.umedDataFiles`, a session-lifetime, in-memory registry of uploaded
   files keyed by a `dataFile` block's `name`. It is the only app code that
   stores or looks up an uploaded file, and it never touches disk. A

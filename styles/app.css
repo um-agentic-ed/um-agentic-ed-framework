@@ -266,7 +266,6 @@ body.presenter-mode .main-pane { padding-top: 0; }
 body.presenter-mode #educational-content { max-width: 1100px; }
 body.presenter-mode.whiteboard-open #educational-content { max-width: 2200px; }
 body.presenter-mode .slide-content .data-file-status { font-size: .85em; }
-body.presenter-mode .slide-content .widget-note,
 body.presenter-mode .slide-content .widget-control { font-size: .9em; }
 body.presenter-mode .slide-content .gpt-followups h2 { font-size: 1.1em; }
 #educational-content:has(#slide-menu:not([hidden])) .content-toolbar {
@@ -298,7 +297,7 @@ body.presenter-mode .slide-content .gpt-followups h2 { font-size: 1.1em; }
   stroke-linejoin: round;
 }
 #level-navigation button[aria-current="true"] { color: var(--accent-active-text); background: var(--accent-active); border-color: var(--accent-active); }
-#level-navigation .chatgpt-button, #level-navigation .notepad-button {
+#level-navigation .chatbot-button, #level-navigation .notepad-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -306,7 +305,7 @@ body.presenter-mode .slide-content .gpt-followups h2 { font-size: 1.1em; }
   padding: .4rem;
   color: #212529;
 }
-#level-navigation .chatgpt-button svg, #level-navigation .notepad-button svg { display: block; }
+#level-navigation .chatbot-button svg, #level-navigation .notepad-button svg { display: block; }
 #level-navigation .notepad-button[aria-pressed="true"] { color: #fff; background: #005a9c; border-color: #005a9c; }
 #content-toolbar button:disabled {
   color: #6c757d;
@@ -448,7 +447,6 @@ body.presenter-mode .slide-content .gpt-followups h2 { font-size: 1.1em; }
 .data-file-upload-button:hover { background: #eef3f6; border-color: var(--umed-brand-accent); }
 .data-file-status { font-size: .85rem; font-style: italic; color: #5b6b76; }
 .widget-placeholder { margin: 0; padding: .75rem; color: #5b6b76; background: #eef3f6; border-radius: 4px; font-style: italic; }
-.widget-note { margin: 0 0 1rem; color: #5b6b76; font-size: .9rem; }
 .widget-controls { display: flex; flex-wrap: wrap; gap: 1rem; margin-bottom: 1rem; }
 .widget-control { display: flex; flex-direction: column; gap: .3rem; flex: 1 1 220px; font-size: .9rem; font-weight: 600; }
 .widget-control input[type="range"] { width: 100%; }
@@ -876,7 +874,6 @@ body.presenter-mode .slide-content .gpt-followups h2 { font-size: 1.1em; }
 .editor-add-menu-list button:hover, .editor-add-menu-list button:focus-visible {
   background: #eef1f3;
 }
-.editor-error { margin: 0; color: #b3261e; font-size: .85rem; }
 .editor-widget-note { margin: 0; color: #5b6b76; font-size: .85rem; font-style: italic; }
 .editor-widget-prompt-row { display: flex; align-items: center; gap: .5rem; }
 .editor-widget-prompt {

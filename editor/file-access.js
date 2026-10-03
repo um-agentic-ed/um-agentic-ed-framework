@@ -5,7 +5,7 @@
   // their App's Parent repository once per session (on first save). That choice is verified and
   // narrowed to its src/content folder, which every other Editor path is relative to, so the
   // Editor can only write inside the App's content.
-  const CONTENT_ROOT_LABEL = "src/content";
+  const CONTENT_ROOT_LABEL = window.umedContentRoot;
   let rootHandlePromise = null;
 
   async function getSubdirectory(parentHandle, name) {

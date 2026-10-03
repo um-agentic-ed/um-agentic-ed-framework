@@ -3,6 +3,8 @@
 
   const index = window.umedAppContentIndex;
   const identity = window.umedAppIdentity || {};
+  // The one place the content folder path is declared; the Editor and widget host read it too.
+  const CONTENT_ROOT = window.umedContentRoot = "src/content";
   const contentStore = window.umedAppContent = window.umedAppContent || {};
   const elements = {
     appLayout: document.querySelector(".app-layout"),
@@ -70,7 +72,6 @@
     return;
   }
 
-  const CONTENT_ROOT = "src/content";
   const subjectMenu = {
     wrapper: document.getElementById("subject-menu"),
     button: document.getElementById("subject-menu-button"),
@@ -79,7 +80,7 @@
   };
 
   // Tracks the redraw closure and metadata for the Slide/overview currently on screen, so the
-  // Editor pane (src/editor/editor.js) can rebuild its inputs and trigger a preview-only redraw
+  // Editor pane (editor/editor.js) can rebuild its inputs and trigger a preview-only redraw
   // after mutating the in-memory content object, without touching disk.
   let currentDraw = null;
   let currentInfo = null;
@@ -1081,12 +1082,16 @@
     persistIndexNow();
   }
 
+  // Subject folders sit directly under src/content, so their ids (and content keys) must not clash
+  // with the folder and keys reserved for App-level content.
+  const RESERVED_SUBJECT_IDS = ["assets", "app-overview", "routing-error"];
+
   async function handleAddSubject(insertIndex) {
     const title = window.umedComponents && window.umedComponents.promptText
       ? await window.umedComponents.promptText("Title for the new Subject:", { confirmLabel: "Add Subject" })
       : null;
     if (!title) return;
-    const id = uniqueId(title, index.subjects.map(item => item.id));
+    const id = uniqueId(title, [...index.subjects.map(item => item.id), ...RESERVED_SUBJECT_IDS]);
     const newSubject = { id, title, order: 0, categories: [] };
 
     index.subjects.push(newSubject);
@@ -1322,11 +1327,11 @@
 
     const chatButton = document.createElement("button");
     chatButton.type = "button";
-    chatButton.className = "chatgpt-button";
+    chatButton.className = "chatbot-button";
     chatButton.disabled = !isContentSlide;
     chatButton.setAttribute("aria-label", "Ask GPT");
     chatButton.title = "Ask GPT";
-    chatButton.innerHTML = (window.umedIcons && window.umedIcons.chatgpt) || "◉";
+    chatButton.innerHTML = (window.umedIcons && window.umedIcons.chatbot) || "◉";
     chatButton.addEventListener("click", () => askGpt());
     gptButton = chatButton;
     elements.levels.append(chatButton);
@@ -1809,7 +1814,7 @@
       askButton.className = "gpt-followup-ask-button";
       askButton.title = "Ask GPT";
       askButton.setAttribute("aria-label", `Ask GPT: ${question}`);
-      askButton.innerHTML = (window.umedIcons && window.umedIcons.chatgpt) || "◉";
+      askButton.innerHTML = (window.umedIcons && window.umedIcons.chatbot) || "◉";
       askButton.addEventListener("click", () => askGpt(question));
       item.append(askButton, text);
       list.append(item);
@@ -2268,14 +2273,12 @@
     });
   }
 
-  // Read-only hook for src/editor/editor.js: it never touches routing or contentStore directly
+  // Hook for editor/editor.js: it never touches routing or contentStore directly
   // through this object, only through window.umedAppContent, so app.js stays the single source of
   // truth for what is currently on screen.
   window.umedApp = {
     refreshSlide: () => { if (currentDraw) currentDraw(); },
     refreshNavigation: () => { renderSubjectMenu(); renderSidebar(); rebuildSearchIndex(); },
-    rebuildSearchIndex,
-    getActiveSubject: activeSubject,
     getCurrentSlideInfo: () => currentInfo
   };
 

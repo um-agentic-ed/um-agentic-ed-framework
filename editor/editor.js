@@ -430,12 +430,19 @@
     return markdownField;
   }
 
-  // Resolves the folder (relative to the src/content root handle) that an image block's files
+  // Converts a page-relative content path (e.g. "src/content/<slide>/slide.js") to one relative to
+  // the content folder handle that Editor file operations use.
+  function contentRelativePath(path) {
+    const prefix = `${window.umedContentRoot}/`;
+    if (path === window.umedContentRoot) return "";
+    return path.startsWith(prefix) ? path.slice(prefix.length) : path;
+  }
+
+  // Resolves the folder (relative to the content root handle) that an image block's files
   // belong in, matching the imageBasePath logic in app.js's renderBlock.
   function imageRelativeDir(block) {
     if ((block.imageSource || "slide") === "shared") return "assets/images";
-    const assetBasePath = (current && current.assetBasePath) || "src/content";
-    return assetBasePath.replace(/^src\/content\/?/, "");
+    return contentRelativePath((current && current.assetBasePath) || window.umedContentRoot);
   }
 
   // Uploads one or more Editor-picked image files into the block's target folder (Slide or
@@ -747,7 +754,7 @@
       if (window.umedComponents && window.umedComponents.attachTooltip) {
         window.umedComponents.attachTooltip(
           sourceField.querySelector("span"),
-          "Slide: /src/content/<subject>/<category>/<section>/<slide>/; Shared: /src/content/assets/images/"
+          `Slide: /${window.umedContentRoot}/<subject>/<category>/<section>/<slide>/; Shared: /${window.umedContentRoot}/assets/images/`
         );
       }
       controls.append(sourceField);
@@ -1421,7 +1428,7 @@
   async function writeSlideOrderFiles(rootHandle, subjectId, categoryId, sectionId, slideIndexEntries) {
     for (const entry of slideIndexEntries) {
       const key = `${subjectId}/${categoryId}/${sectionId}/${entry.id}`;
-      const src = `src/content/${key}/slide.js`;
+      const src = `${window.umedContentRoot}/${key}/slide.js`;
       const data = await loadSlideContent(key, src);
       if (!data) continue;
       data.order = entry.order;
@@ -1564,7 +1571,7 @@
         data.contentUpdatedAt = new Date().toISOString();
       }
 
-      const relativePath = info.src.replace(/^src\/content\//, "");
+      const relativePath = contentRelativePath(info.src);
       await window.umedEditorFS.writeTextFile(rootHandle, relativePath, serializeContentFile(info, data));
 
       syncIndexEntry(info.key, data, info.kind);
@@ -1678,7 +1685,7 @@
         return;
       }
 
-      const relativePath = info.src.replace(/^src\/content\//, "");
+      const relativePath = contentRelativePath(info.src);
       const folderPath = relativePath.split("/").slice(0, -1).join("/");
       await window.umedEditorFS.deleteDirectory(rootHandle, folderPath);
 

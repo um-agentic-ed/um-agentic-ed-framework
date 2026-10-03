@@ -27,7 +27,9 @@
       showPlaceholder(container, "This widget block has no name yet.");
       return;
     }
-    const key = `${assetBasePath}/${name}`.replace(/^src\/content\//, "");
+    const contentPrefix = `${window.umedContentRoot}/`;
+    const widgetPath = `${assetBasePath}/${name}`;
+    const key = widgetPath.startsWith(contentPrefix) ? widgetPath.slice(contentPrefix.length) : widgetPath;
     const src = `${assetBasePath}/${name}.js`;
 
     const start = () => {
