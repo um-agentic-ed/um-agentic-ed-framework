@@ -1,0 +1,5 @@
+# exclude old and unused files
+old
+_old
+unused
+_unused
