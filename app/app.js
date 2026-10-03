@@ -34,10 +34,11 @@
     notesLoad: document.getElementById("learner-notes-load"),
     notesToggle: document.getElementById("learner-notes-toggle"),
     notesFile: document.getElementById("learner-notes-file"),
-    umGptToast: document.getElementById("umed-gpt-toast"),
-    umGptToastMessage: document.getElementById("umed-gpt-toast-message"),
-    umGptToastClose: document.getElementById("umed-gpt-toast-close"),
-    umGptToastSuppress: document.getElementById("umed-gpt-toast-suppress")
+    gptToast: document.getElementById("umed-gpt-toast"),
+    gptToastMessage: document.getElementById("umed-gpt-toast-message"),
+    gptToastLink: document.getElementById("umed-gpt-toast-link"),
+    gptToastClose: document.getElementById("umed-gpt-toast-close"),
+    gptToastSuppress: document.getElementById("umed-gpt-toast-suppress")
   };
   const appTitle = identity.appTitle || "Untitled App";
   document.title = appTitle;
@@ -46,6 +47,21 @@
     appTitleLink.textContent = appTitle;
     appTitleLink.setAttribute("aria-label", `${appTitle} home`);
   }
+
+  // The App's chatbot address comes from the root app.js. Only http(s) addresses are accepted so
+  // a malformed value can never become a script URL. Without one, prompts are still copied to the
+  // clipboard but no chatbot tab is opened or linked.
+  const chatbotUrl = (() => {
+    try {
+      const url = new URL(identity.chatbotUrl);
+      return url.protocol === "https:" || url.protocol === "http:" ? url.href : "";
+    } catch (error) {
+      return "";
+    }
+  })();
+  const chatbotLink = elements.gptToastLink && elements.gptToastLink.querySelector("a");
+  if (chatbotLink && chatbotUrl) chatbotLink.href = chatbotUrl;
+  if (elements.gptToastLink) elements.gptToastLink.hidden = !chatbotUrl;
   if (!index || !Array.isArray(index.subjects)) {
     elements.education.hidden = false;
     elements.toolbar.hidden = true;
@@ -83,16 +99,16 @@
   let viewingSharedNotes = false;
   let contentReloadToken = "";
   let sidebarCollapsed = false;
-  const UM_GPT_URL = "https://umgpt.umich.edu/";
+  const UMED_GPT_WINDOW_NAME = "umed-chatbot";
   const NOTES_FILE_FORMAT = "umed-learner-notes";
   const NOTES_FILE_SCHEMA_VERSION = 1;
   const MAX_NOTES_FILE_BYTES = 10 * 1024 * 1024;
-  const UM_GPT_TAB_OPENED_KEY = "umed-gpt-tab-opened";
-  const UM_GPT_TOAST_SUPPRESSED_KEY = "umed-gpt-toast-suppressed";
-  let umGptTabOpened = readSessionFlag(UM_GPT_TAB_OPENED_KEY);
-  let umGptToastSuppressed = readSessionFlag(UM_GPT_TOAST_SUPPRESSED_KEY);
-  let umGptToastTimer = null;
-  let umGptButton = null;
+  const UMED_GPT_TAB_OPENED_KEY = "umed-gpt-tab-opened";
+  const UMED_GPT_TOAST_SUPPRESSED_KEY = "umed-gpt-toast-suppressed";
+  let gptTabOpened = readSessionFlag(UMED_GPT_TAB_OPENED_KEY);
+  let gptToastSuppressed = readSessionFlag(UMED_GPT_TOAST_SUPPRESSED_KEY);
+  let gptToastTimer = null;
+  let gptButton = null;
   let slidePromptContent = null;
 
   // Unsubscribe callbacks for dataFile blocks' window.umedDataFiles.onChange() listeners in the
@@ -242,7 +258,7 @@
   async function exportNotes() {
     const confirmed = await confirmAction(
       "Exporting creates an unencrypted JSON copy for archival, transfer, or sharing - " +
-      "do not export notes with patient-identifiable or other sensitive information.",
+      "do not export notes with sensitive information not appropriate for anyone to read.",
       { confirmLabel: "Export notes", cancelLabel: "Cancel" }
     );
     if (!confirmed) return;
@@ -1208,11 +1224,11 @@
     chatButton.type = "button";
     chatButton.className = "chatgpt-button";
     chatButton.disabled = !isContentSlide;
-    chatButton.setAttribute("aria-label", "Ask UM GPT");
-    chatButton.title = "Ask UM GPT";
+    chatButton.setAttribute("aria-label", "Ask GPT");
+    chatButton.title = "Ask GPT";
     chatButton.innerHTML = (window.umedIcons && window.umedIcons.chatgpt) || "◉";
-    chatButton.addEventListener("click", () => askUmGpt());
-    umGptButton = chatButton;
+    chatButton.addEventListener("click", () => askGpt());
+    gptButton = chatButton;
     elements.levels.append(chatButton);
 
     const pages = allPages();
@@ -1264,22 +1280,22 @@
 
   // Clipboard access must begin from the button's user gesture. The fallback supports local-file
   // use in browsers that do not expose the asynchronous Clipboard API in that context.
-  function askUmGpt(followupQuestion = "") {
+  function askGpt(followupQuestion = "") {
     // Start clipboard access before opening a tab so Chromium recognizes it as part of this
     // direct user gesture and does not request separate clipboard permission.
-    copyUmGptPrompt(followupQuestion).then(showUmGptToast);
-    if (!umGptTabOpened) {
-      const chatWindow = window.open(UM_GPT_URL, "ask_umgpt");
+    copyGptPrompt(followupQuestion).then(showGptToast);
+    if (chatbotUrl && !gptTabOpened) {
+      const chatWindow = window.open(chatbotUrl, UMED_GPT_WINDOW_NAME);
       if (chatWindow) {
-        umGptTabOpened = true;
-        setSessionFlag(UM_GPT_TAB_OPENED_KEY, true);
+        gptTabOpened = true;
+        setSessionFlag(UMED_GPT_TAB_OPENED_KEY, true);
       }
     }
   }
 
-  async function copyUmGptPrompt(followupQuestion = "") {
+  async function copyGptPrompt(followupQuestion = "") {
     // Follow-up suggestion text is rendered outside `slidePromptContent`, keeping it out of the
-    // quoted teaching material sent to UM GPT.
+    // quoted teaching material sent to GPT.
     let slideText = (slidePromptContent || elements.slide).innerText.trim();
     slideText = slideText.replace(/\n/g, "\n> ");
     const learnerLevel = identity.learnerLevel ? `${identity.learnerLevel} ` : "";
@@ -1311,37 +1327,37 @@
       if (!copied) throw new Error("The browser declined the copy command.");
       return true;
     } catch (error) {
-      console.warn("Could not copy the UM GPT prompt to the clipboard.", clipboardError || error);
+      console.warn("Could not copy the GPT prompt to the clipboard.", clipboardError || error);
       return false;
     }
   }
 
-  function showUmGptToast(copied) {
-    if (umGptToastSuppressed) return;
-    clearTimeout(umGptToastTimer);
-    elements.umGptToastMessage.textContent = copied
-      ? "A prompt was copied to your clipboard. Paste it into UM GPT."
-      : "The prompt could not be copied. You can still open UM GPT and ask about this slide.";
-    elements.umGptToastSuppress.checked = false;
-    positionUmGptToast();
-    elements.umGptToast.hidden = false;
-    umGptToastTimer = setTimeout(hideUmGptToast, 10000);
+  function showGptToast(copied) {
+    if (gptToastSuppressed) return;
+    clearTimeout(gptToastTimer);
+    elements.gptToastMessage.textContent = copied
+      ? "A prompt was copied to your clipboard. Paste it into the chatbot."
+      : "The prompt could not be copied. You can still open a chatbot and ask about this slide.";
+    elements.gptToastSuppress.checked = false;
+    positionGptToast();
+    elements.gptToast.hidden = false;
+    gptToastTimer = setTimeout(hideGptToast, 10000);
   }
 
   // The GPT control is dynamically rendered with the Level buttons. Measure it at display time
   // so the fixed toast shares its right edge and appears directly beneath the toolbar row.
-  function positionUmGptToast() {
-    if (!umGptButton) return;
-    const buttonBounds = umGptButton.getBoundingClientRect();
-    elements.umGptToast.style.top = `${Math.round(buttonBounds.bottom + 8)}px`;
-    elements.umGptToast.style.right = `${Math.max(0, Math.round(window.innerWidth - buttonBounds.right))}px`;
-    elements.umGptToast.style.bottom = "auto";
+  function positionGptToast() {
+    if (!gptButton) return;
+    const buttonBounds = gptButton.getBoundingClientRect();
+    elements.gptToast.style.top = `${Math.round(buttonBounds.bottom + 8)}px`;
+    elements.gptToast.style.right = `${Math.max(0, Math.round(window.innerWidth - buttonBounds.right))}px`;
+    elements.gptToast.style.bottom = "auto";
   }
 
-  function hideUmGptToast() {
-    clearTimeout(umGptToastTimer);
-    umGptToastTimer = null;
-    elements.umGptToast.hidden = true;
+  function hideGptToast() {
+    clearTimeout(gptToastTimer);
+    gptToastTimer = null;
+    elements.gptToast.hidden = true;
   }
 
   // Tier identifiers use kebab-case; display titles are centralized here so metadata and UI
@@ -1691,10 +1707,10 @@
       const askButton = document.createElement("button");
       askButton.type = "button";
       askButton.className = "gpt-followup-ask-button";
-      askButton.title = "Ask UM GPT";
-      askButton.setAttribute("aria-label", `Ask UM GPT: ${question}`);
+      askButton.title = "Ask GPT";
+      askButton.setAttribute("aria-label", `Ask GPT: ${question}`);
       askButton.innerHTML = (window.umedIcons && window.umedIcons.chatgpt) || "◉";
-      askButton.addEventListener("click", () => askUmGpt(question));
+      askButton.addEventListener("click", () => askGpt(question));
       item.append(askButton, text);
       list.append(item);
     });
@@ -2056,11 +2072,11 @@
     applyPresenterMode();
   });
 
-  elements.umGptToastClose.addEventListener("click", hideUmGptToast);
-  elements.umGptToastSuppress.checked = umGptToastSuppressed;
-  elements.umGptToastSuppress.addEventListener("change", event => {
-    umGptToastSuppressed = event.currentTarget.checked;
-    setSessionFlag(UM_GPT_TOAST_SUPPRESSED_KEY, umGptToastSuppressed);
+  elements.gptToastClose.addEventListener("click", hideGptToast);
+  elements.gptToastSuppress.checked = gptToastSuppressed;
+  elements.gptToastSuppress.addEventListener("change", event => {
+    gptToastSuppressed = event.currentTarget.checked;
+    setSessionFlag(UMED_GPT_TOAST_SUPPRESSED_KEY, gptToastSuppressed);
   });
 
   // Reflects sidebarCollapsed onto the DOM: the CSS class drives the slide animation, aria-expanded
@@ -2135,7 +2151,7 @@
     if (document.visibilityState === "hidden") flushPendingNote();
   });
   window.addEventListener("resize", () => {
-    if (!elements.umGptToast.hidden) positionUmGptToast();
+    if (!elements.gptToast.hidden) positionGptToast();
   });
 
   // Ctrl-click (Cmd-click on Mac) on the app title toggles Editor mode in place on the current

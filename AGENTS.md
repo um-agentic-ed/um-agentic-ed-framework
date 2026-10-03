@@ -147,6 +147,10 @@ once when creating an App, by hand or with the `set-app-identity` skill:
     context in prompts sent to AI chat assistants.
   - `learnerLevel`: the typical Learner the App targets, as an adjective phrase 
     that fits "I am a ___ learner" (e.g., "undergraduate", "post-graduate").
+  - `chatbotUrl`: the `https://` (or `http://`) address of the AI chatbot to open 
+    when a Learner asks about a Slide, since developers prefer different chatbots. 
+    The prompt, with the Slide text, is copied to the clipboard for pasting there. 
+    If blank or invalid, prompts are still copied but no chatbot is opened or linked.
 - `app.css` sets CSS custom properties on `:root` that override Framework 
   defaults: `--umed-brand-bg`, `--umed-brand-text`, `--umed-brand-hover-bg`, 
   `--umed-brand-border` and `--umed-brand-accent`. 
@@ -424,11 +428,11 @@ type-specific fields:
 - `divider` block: renders an `<hr>` to visually separate Blocks on a Slide. It
   has no fields beyond `type` and does not accept a `markdown` lead-in.
 - `gptFollowup` block: a Slide-only `questions` array of short learner-facing
-  question strings suggested by an Editor for use with UM GPT. All nonblank
+  question strings suggested by an Editor for use with GPT. All nonblank
   questions from a Slide's `gptFollowup` blocks render together at the bottom
   of that Slide, after an `<hr>` and the heading "Suggested GPT follow-up
   prompts," regardless of the blocks' editor order. Each question has an
-  "Ask UM GPT" icon button that appends that question after the quoted Slide
+  "Ask GPT" icon button that appends that question after the quoted Slide
   text in the copied prompt; follow-up suggestions themselves are excluded
   from the quoted text.
 - `question` block: a self-evaluation multiple-choice question, embeddable

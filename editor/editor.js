@@ -1153,7 +1153,7 @@
     });
   }
 
-  // Follow-up prompts are short, ordered questions appended to UM GPT requests. Unlike multiple-
+  // Follow-up prompts are short, ordered questions appended to GPT requests. Unlike multiple-
   // choice answers they need no correctness state, so a compact auto-sizing textarea list is more
   // useful than a nested sortable editor. The block itself can still be moved in the outer list.
   function buildGptFollowupBlockFields(block, fieldset) {
