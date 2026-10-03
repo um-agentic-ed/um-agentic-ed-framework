@@ -1,8 +1,9 @@
 (function () {
   "use strict";
 
-  const index = window.UMDGGContentIndex;
-  const contentStore = window.UMDGGContent = window.UMDGGContent || {};
+  const index = window.umedAppContentIndex;
+  const identity = window.umedAppIdentity || {};
+  const contentStore = window.umedAppContent = window.umedAppContent || {};
   const elements = {
     appLayout: document.querySelector(".app-layout"),
     sidebar: document.getElementById("sidebar"),
@@ -33,18 +34,33 @@
     notesLoad: document.getElementById("learner-notes-load"),
     notesToggle: document.getElementById("learner-notes-toggle"),
     notesFile: document.getElementById("learner-notes-file"),
-    umGptToast: document.getElementById("um-gpt-toast"),
-    umGptToastMessage: document.getElementById("um-gpt-toast-message"),
-    umGptToastClose: document.getElementById("um-gpt-toast-close"),
-    umGptToastSuppress: document.getElementById("um-gpt-toast-suppress")
+    umGptToast: document.getElementById("umed-gpt-toast"),
+    umGptToastMessage: document.getElementById("umed-gpt-toast-message"),
+    umGptToastClose: document.getElementById("umed-gpt-toast-close"),
+    umGptToastSuppress: document.getElementById("umed-gpt-toast-suppress")
   };
-  if (!index || !Array.isArray(index.categories)) {
+  const appTitle = identity.appTitle || "Untitled App";
+  document.title = appTitle;
+  const appTitleLink = document.querySelector(".app-title");
+  if (appTitleLink) {
+    appTitleLink.textContent = appTitle;
+    appTitleLink.setAttribute("aria-label", `${appTitle} home`);
+  }
+  if (!index || !Array.isArray(index.subjects)) {
     elements.education.hidden = false;
     elements.toolbar.hidden = true;
     elements.menu.hidden = true;
     elements.slide.textContent = "The content index could not be loaded.";
     return;
   }
+
+  const CONTENT_ROOT = "src/content";
+  const subjectMenu = {
+    wrapper: document.getElementById("subject-menu"),
+    button: document.getElementById("subject-menu-button"),
+    label: document.getElementById("subject-menu-label"),
+    popup: document.getElementById("subject-menu-popup")
+  };
 
   // Tracks the redraw closure and metadata for the Slide/overview currently on screen, so the
   // Editor pane (src/editor/editor.js) can rebuild its inputs and trigger a preview-only redraw
@@ -68,18 +84,18 @@
   let contentReloadToken = "";
   let sidebarCollapsed = false;
   const UM_GPT_URL = "https://umgpt.umich.edu/";
-  const NOTES_FILE_FORMAT = "umdgg-learner-notes";
+  const NOTES_FILE_FORMAT = "umed-learner-notes";
   const NOTES_FILE_SCHEMA_VERSION = 1;
   const MAX_NOTES_FILE_BYTES = 10 * 1024 * 1024;
-  const UM_GPT_TAB_OPENED_KEY = "umdgg-um-gpt-tab-opened";
-  const UM_GPT_TOAST_SUPPRESSED_KEY = "umdgg-um-gpt-toast-suppressed";
+  const UM_GPT_TAB_OPENED_KEY = "umed-gpt-tab-opened";
+  const UM_GPT_TOAST_SUPPRESSED_KEY = "umed-gpt-toast-suppressed";
   let umGptTabOpened = readSessionFlag(UM_GPT_TAB_OPENED_KEY);
   let umGptToastSuppressed = readSessionFlag(UM_GPT_TOAST_SUPPRESSED_KEY);
   let umGptToastTimer = null;
   let umGptButton = null;
   let slidePromptContent = null;
 
-  // Unsubscribe callbacks for dataFile blocks' window.UMDGGDataFiles.onChange() listeners in the
+  // Unsubscribe callbacks for dataFile blocks' window.umedDataFiles.onChange() listeners in the
   // Slide currently on screen, so they can be cleared before every re-render alongside widgets
   // (see clearDataFileSubscriptions below) instead of leaking closures over detached DOM nodes.
   let activeDataFileUnsubscribes = [];
@@ -112,8 +128,11 @@
   let sidebarSortables = [];
   let expandedCategoryId = null;
 
-  // The Category/Section belonging to the route currently on screen, so renderSidebar() can mark
-  // the matching Category button/Section link with aria-current for persistent highlighting.
+  // The Subject/Category/Section belonging to the route currently on screen, so renderSidebar()
+  // can mark the matching Category button/Section link with aria-current for persistent
+  // highlighting. The sidebar always lists the Categories of the active Subject; the active
+  // Subject is sticky, so it is kept on the App landing and error routes once one was chosen.
+  let activeSubjectId = null;
   let activeCategoryId = null;
   let activeSectionId = null;
 
@@ -133,9 +152,9 @@
   }
 
   function persistNote(slideUuid) {
-    if (!slideUuid || !index.appUuid || !window.UMDGGLearnerNotes) return Promise.resolve(false);
+    if (!slideUuid || !identity.appUuid || !window.umedLearnerNotes) return Promise.resolve(false);
     const text = slideNotes.get(slideUuid) || "";
-    return window.UMDGGLearnerNotes.saveNote(index.appUuid, slideUuid, text)
+    return window.umedLearnerNotes.saveNote(identity.appUuid, slideUuid, text)
       .catch(error => {
         console.warn("Learner note could not be saved.", error);
         return false;
@@ -186,8 +205,8 @@
     }
 
     elements.notepadText.value = "";
-    if (!index.appUuid || !window.UMDGGLearnerNotes) return;
-    window.UMDGGLearnerNotes.getNote(index.appUuid, slideUuid)
+    if (!identity.appUuid || !window.umedLearnerNotes) return;
+    window.umedLearnerNotes.getNote(identity.appUuid, slideUuid)
       .then(text => {
         if (loadVersion !== noteLoadVersion || activeNotepadKey !== slideUuid) return;
         if (!slideNotes.has(slideUuid) && text !== null) slideNotes.set(slideUuid, text);
@@ -201,12 +220,12 @@
   function noteMetadataByUuid() {
     return new Map(allContentSlides().map(target => [target.slide.uuid, {
       slideTitle: target.slide.title,
-      routeAtExport: `${target.category.id}/${target.section.id}/${target.slide.id}`
+      routeAtExport: `${target.subject.id}/${target.category.id}/${target.section.id}/${target.slide.id}`
     }]));
   }
 
   function notesFileName() {
-    const safeName = String(index.appName || "learner-notes")
+    const safeName = String(identity.appName || "learner-notes")
       .trim()
       .replace(/[^a-zA-Z0-9._-]+/g, "-")
       .replace(/^-+|-+$/g, "") || "learner-notes";
@@ -214,8 +233,8 @@
   }
 
   async function confirmAction(message, options) {
-    if (window.UMDGGComponents && window.UMDGGComponents.confirm) {
-      return window.UMDGGComponents.confirm(message, options);
+    if (window.umedComponents && window.umedComponents.confirm) {
+      return window.umedComponents.confirm(message, options);
     }
     return window.confirm(message);
   }
@@ -229,8 +248,8 @@
     if (!confirmed) return;
 
     await flushPendingNote();
-    const storedNotes = window.UMDGGLearnerNotes && index.appUuid
-      ? await window.UMDGGLearnerNotes.getAllNotes(index.appUuid)
+    const storedNotes = window.umedLearnerNotes && identity.appUuid
+      ? await window.umedLearnerNotes.getAllNotes(identity.appUuid)
       : [];
     const records = new Map(storedNotes.map(note => [note.slideUuid, { ...note }]));
     slideNotes.forEach((text, slideUuid) => {
@@ -256,7 +275,7 @@
     const payload = {
       format: NOTES_FILE_FORMAT,
       schemaVersion: NOTES_FILE_SCHEMA_VERSION,
-      app: { uuid: index.appUuid, name: index.appName },
+      app: { uuid: identity.appUuid, name: identity.appName },
       exportedAt: new Date().toISOString(),
       notes
     };
@@ -275,7 +294,7 @@
     if (payload.format !== NOTES_FILE_FORMAT || payload.schemaVersion !== NOTES_FILE_SCHEMA_VERSION) {
       throw new Error("The selected file is not a supported learner-notes file.");
     }
-    if (!payload.app || payload.app.uuid !== index.appUuid) {
+    if (!payload.app || payload.app.uuid !== identity.appUuid) {
       throw new Error("These notes belong to a different educational app and cannot be loaded here.");
     }
     if (!Array.isArray(payload.notes)) throw new Error("The notes file does not contain a valid notes list.");
@@ -314,8 +333,8 @@
     const availabilityMessage = unavailableCount
       ? ` ${matchingCount} incoming notes match current Slides; ${unavailableCount} refer to Slides unavailable in this version.`
       : ` All ${matchingCount} incoming notes match current Slides.`;
-    const choice = window.UMDGGComponents && window.UMDGGComponents.chooseOption
-      ? await window.UMDGGComponents.chooseOption(
+    const choice = window.umedComponents && window.umedComponents.chooseOption
+      ? await window.umedComponents.chooseOption(
           `${availabilityMessage}\n\n` +
           "Choose whether to view this file temporarily without changing your notes, or replace all of your notes permanently.",
           ["View shared notes", "Replace my notes"]
@@ -337,7 +356,7 @@
     );
     if (!confirmed) return;
     await flushPendingNote();
-    if (!window.UMDGGLearnerNotes || !(await window.UMDGGLearnerNotes.replaceAllNotes(index.appUuid, notes))) {
+    if (!window.umedLearnerNotes || !(await window.umedLearnerNotes.replaceAllNotes(identity.appUuid, notes))) {
       throw new Error("The notes could not be replaced because browser storage is unavailable.");
     }
     viewingSharedNotes = false;
@@ -358,7 +377,7 @@
       activeNotepadKey = key;
       elements.notepadText.value = "";
     }
-    window.dispatchEvent(new CustomEvent("umdgg:slide-loaded", { detail: currentInfo }));
+    window.dispatchEvent(new CustomEvent("umed:slide-loaded", { detail: currentInfo }));
   }
 
   function setNotepadOpen(nextOpen) {
@@ -376,35 +395,45 @@
 
   const sorted = (items) => items.slice().sort((a, b) => a.order - b.order);
 
+  const activeSubject = () => index.subjects.find(item => item.id === activeSubjectId) || null;
+
   // The Section overview is identified by a null Slide id so it can participate in the same
-  // ordered, book-like navigation sequence as app, Category, and authored Slide pages.
+  // ordered, book-like navigation sequence as app, Subject, Category, and authored Slide pages.
   const sectionOverviewSlide = (section) => ({ id: null, title: section.title, level: null, order: 0 });
 
-  // Builds the complete reading order fresh from persisted order fields so Category, Section,
-  // and Slide additions or reordering are reflected immediately in Previous/Next navigation.
+  // Builds the complete reading order fresh from persisted order fields so Subject, Category,
+  // Section, and Slide additions or reordering are reflected immediately in Previous/Next
+  // navigation. The order runs through every Subject, not just the active one.
   const allPages = () => [
     { kind: "app" },
-    ...sorted(index.categories).flatMap(category => [
-      { kind: "category", category },
-      ...sorted(category.sections).flatMap(section => [
-        { kind: "section", category, section, slide: sectionOverviewSlide(section) },
-        ...sorted(section.slides).map(slide => ({ kind: "slide", category, section, slide }))
+    ...sorted(index.subjects).flatMap(subject => [
+      { kind: "subject", subject },
+      ...sorted(subject.categories).flatMap(category => [
+        { kind: "category", subject, category },
+        ...sorted(category.sections).flatMap(section => [
+          { kind: "section", subject, category, section, slide: sectionOverviewSlide(section) },
+          ...sorted(section.slides).map(slide => ({ kind: "slide", subject, category, section, slide }))
+        ])
       ])
     ])
   ];
 
   function pageKey(target) {
-    if (!target || target.kind === "app" || !target.category) return "app";
-    if (target.kind === "category" || !target.section) return `category:${target.category.id}`;
-    if (!target.slide || !target.slide.id) return `section:${target.category.id}/${target.section.id}`;
-    return `slide:${target.category.id}/${target.section.id}/${target.slide.id}`;
+    if (!target || target.kind === "app" || !target.subject) return "app";
+    if (target.kind === "subject" || !target.category) return `subject:${target.subject.id}`;
+    const path = `${target.subject.id}/${target.category.id}`;
+    if (target.kind === "category" || !target.section) return `category:${path}`;
+    if (!target.slide || !target.slide.id) return `section:${path}/${target.section.id}`;
+    return `slide:${path}/${target.section.id}/${target.slide.id}`;
   }
 
-  // Search indexes authored, content-bearing Slides only. Category and Section landing Slides
-  // are navigational introductions, not part of the learner-content search corpus.
-  const allContentSlides = () => sorted(index.categories).flatMap(category =>
-    sorted(category.sections).flatMap(section =>
-      sorted(section.slides).map(slide => ({ category, section, slide }))
+  // Search indexes authored, content-bearing Slides only. Subject, Category and Section landing
+  // Slides are navigational introductions, not part of the learner-content search corpus.
+  const allContentSlides = () => sorted(index.subjects).flatMap(subject =>
+    sorted(subject.categories).flatMap(category =>
+      sorted(category.sections).flatMap(section =>
+        sorted(section.slides).map(slide => ({ subject, category, section, slide }))
+      )
     )
   );
 
@@ -425,7 +454,7 @@
   function rebuildSearchIndex() {
     const keywordToSlideKeys = new Map();
     for (const target of allContentSlides()) {
-      const key = `${target.category.id}/${target.section.id}/${target.slide.id}`;
+      const key = `${target.subject.id}/${target.category.id}/${target.section.id}/${target.slide.id}`;
       for (const keyword of new Set(target.slide.keywords || [])) {
         // The persisted manifest is expected to contain one normalized word per entry. Ignore
         // malformed legacy data rather than accidentally restoring phrase/substring behavior.
@@ -489,16 +518,25 @@
     sidebarSortables = [];
   }
 
-  // Renders the sidebar as Category buttons each with a collapsible list of Section links. In
-  // Editor mode, wires up Sortable.js drag-and-drop reordering (Sections within/across
-  // Categories, and whole Categories dragged by their button) plus spacer-based "+" insertion
+  // Renders the sidebar as the active Subject's Category buttons, each with a collapsible list of
+  // Section links. In Editor mode, wires up Sortable.js drag-and-drop reordering (Sections
+  // within/across Categories, and whole Categories dragged by their button) plus spacer-based
+  // "+" insertion
   // points, using the same "chunk carries its own trailing spacer" approach as the Slides menu:
   // a Category chunk is its button/Section-list plus the boundary spacer that follows it, and a
   // Section chunk is its link plus the spacer that follows it (when one exists).
   function renderSidebar() {
     destroySidebarSortables();
     elements.sidebar.replaceChildren();
-    const categories = sorted(index.categories);
+    const subject = activeSubject();
+    if (!subject) {
+      const hint = document.createElement("p");
+      hint.className = "sidebar-hint";
+      hint.textContent = "Choose a Subject from the menu in the header to see its Categories.";
+      elements.sidebar.append(hint);
+      return;
+    }
+    const categories = sorted(subject.categories);
 
     const leadingTarget = categories.length ? { category: categories[0], insertIndex: 0 } : null;
     if (isEditorUiActive()) elements.sidebar.append(createCategoryAdjacentSpacer(0, leadingTarget));
@@ -521,7 +559,7 @@
       button.setAttribute("aria-current", String(category.id === activeCategoryId));
       button.addEventListener("click", () => {
         expandedCategoryId = category.id;
-        location.hash = `#/${category.id}`;
+        location.hash = `#/${subject.id}/${category.id}`;
         renderSidebar();
       });
 
@@ -529,7 +567,7 @@
       sections.forEach((section, sectionIndex) => {
         const link = document.createElement("a");
         link.className = "section-link";
-        link.href = `#/${category.id}/${section.id}`;
+        link.href = `#/${subject.id}/${category.id}/${section.id}`;
         link.textContent = section.title;
         link.setAttribute("aria-current", String(category.id === activeCategoryId && section.id === activeSectionId));
 
@@ -629,8 +667,8 @@
   }
 
   function persistIndexNow() {
-    if (window.UMDGGEditor && typeof window.UMDGGEditor.persistIndex === "function") {
-      window.UMDGGEditor.persistIndex().catch(error => {
+    if (window.umedEditor && typeof window.umedEditor.persistIndex === "function") {
+      window.umedEditor.persistIndex().catch(error => {
         console.error(error);
         alert(`Could not save changes: ${error.message}`);
       });
@@ -651,7 +689,7 @@
     const addButton = document.createElement("button");
     addButton.type = "button";
     addButton.className = "sidebar-add";
-    addButton.innerHTML = (window.UMDGGIcons && window.UMDGGIcons.add) || "+";
+    addButton.innerHTML = (window.umedIcons && window.umedIcons.add) || "+";
     addButton.setAttribute("aria-label", "Add a Category or Section here");
     addButton.addEventListener("click", () => handleAddCategoryOrSection(insertCategoryIndex, sectionTarget));
     spacer.append(addButton);
@@ -668,7 +706,7 @@
     const addButton = document.createElement("button");
     addButton.type = "button";
     addButton.className = "sidebar-add";
-    addButton.innerHTML = (window.UMDGGIcons && window.UMDGGIcons.add) || "+";
+    addButton.innerHTML = (window.umedIcons && window.umedIcons.add) || "+";
     addButton.setAttribute("aria-label", `Add a Section here in ${category.title}`);
     addButton.addEventListener("click", () => handleAddSection(category, insertIndex));
     spacer.append(addButton);
@@ -680,15 +718,17 @@
   // Sortable.js's `evt.newIndex` already reflects the chunk's final position, so no adjustment
   // for its prior position is needed (see the Slides menu's handleSlideDrop for the same case).
   async function handleSectionDrop(sectionId, fromCategoryId, toCategoryId, insertIndex) {
-    const fromCategory = index.categories.find(item => item.id === fromCategoryId);
-    const toCategory = index.categories.find(item => item.id === toCategoryId);
+    const subject = activeSubject();
+    if (!subject) return;
+    const fromCategory = subject.categories.find(item => item.id === fromCategoryId);
+    const toCategory = subject.categories.find(item => item.id === toCategoryId);
     const section = fromCategory && fromCategory.sections.find(item => item.id === sectionId);
     if (!fromCategory || !toCategory || !section) return;
 
     // A cross-Category move also changes every on-disk path in the Section. Keep a complete
     // in-memory rollback point until Editor Mode has copied/rekeyed that folder and saved the
     // manifest. Same-Category moves only change order and use the ordinary manifest save.
-    const indexBeforeMove = fromCategory !== toCategory ? JSON.parse(JSON.stringify(index.categories)) : null;
+    const indexBeforeMove = fromCategory !== toCategory ? JSON.parse(JSON.stringify(subject.categories)) : null;
     const expandedBeforeMove = expandedCategoryId;
     const siblings = sorted(toCategory.sections.filter(item => item.id !== sectionId));
     const clampedIndex = Math.max(0, Math.min(insertIndex, siblings.length));
@@ -712,21 +752,21 @@
     }
 
     try {
-      if (!window.UMDGGEditor || typeof window.UMDGGEditor.moveSection !== "function") {
+      if (!window.umedEditor || typeof window.umedEditor.moveSection !== "function") {
         throw new Error("Section moves require Editor Mode file access.");
       }
-      const moveWarning = await window.UMDGGEditor.moveSection(fromCategoryId, toCategoryId, sectionId);
+      const moveWarning = await window.umedEditor.moveSection(subject.id, fromCategoryId, toCategoryId, sectionId);
       if (moveWarning) alert(moveWarning);
       rebuildSearchIndex();
 
       // A currently displayed route still uses the old Category path. Re-resolve it at the new
       // path so it loads the Section under its rewritten content-store key.
       const parts = location.hash.replace(/^#\/?/, "").split("/").filter(Boolean);
-      if (parts[0] === fromCategoryId && parts[1] === sectionId) {
-        location.hash = `#/${toCategoryId}/${sectionId}${parts[2] ? `/${parts[2]}` : ""}`;
+      if (parts[0] === subject.id && parts[1] === fromCategoryId && parts[2] === sectionId) {
+        location.hash = `#/${subject.id}/${toCategoryId}/${sectionId}${parts[3] ? `/${parts[3]}` : ""}`;
       }
     } catch (error) {
-      index.categories.splice(0, index.categories.length, ...indexBeforeMove);
+      subject.categories.splice(0, subject.categories.length, ...indexBeforeMove);
       expandedCategoryId = expandedBeforeMove;
       rebuildSearchIndex();
       renderSidebar();
@@ -737,10 +777,11 @@
 
   // Same `insertIndex` reasoning as handleSectionDrop above.
   function handleCategoryDrop(categoryId, insertIndex) {
-    const category = index.categories.find(item => item.id === categoryId);
+    const subject = activeSubject();
+    const category = subject && subject.categories.find(item => item.id === categoryId);
     if (!category) return;
 
-    const siblings = sorted(index.categories.filter(item => item.id !== categoryId));
+    const siblings = sorted(subject.categories.filter(item => item.id !== categoryId));
     const clampedIndex = Math.max(0, Math.min(insertIndex, siblings.length));
     const assignedOrder = computeOrderForInsertion(siblings, clampedIndex);
     if (assignedOrder !== null) {
@@ -757,8 +798,8 @@
   async function handleAddCategoryOrSection(insertCategoryIndex, sectionTarget) {
     let kind = "category";
     if (sectionTarget) {
-      if (!(window.UMDGGComponents && window.UMDGGComponents.chooseOption)) return;
-      const choice = await window.UMDGGComponents.chooseOption(
+      if (!(window.umedComponents && window.umedComponents.chooseOption)) return;
+      const choice = await window.umedComponents.chooseOption(
         "Add a new Section here, or a new Category?",
         ["Add Section", "Add Category"]
       );
@@ -770,8 +811,10 @@
   }
 
   async function handleAddSection(category, insertIndex) {
-    const title = window.UMDGGComponents && window.UMDGGComponents.promptText
-      ? await window.UMDGGComponents.promptText("Title for the new Section:", { confirmLabel: "Add Section" })
+    const subject = activeSubject();
+    if (!subject) return;
+    const title = window.umedComponents && window.umedComponents.promptText
+      ? await window.umedComponents.promptText("Title for the new Section:", { confirmLabel: "Add Section" })
       : null;
     if (!title) return;
     const id = uniqueId(title, category.sections.map(item => item.id));
@@ -791,10 +834,10 @@
     renderSidebar();
 
     const initialData = { schemaVersion: 1, title, content: { blocks: [{ type: "text", markdown: "" }] } };
-    if (window.UMDGGEditor && typeof window.UMDGGEditor.createSection === "function") {
+    if (window.umedEditor && typeof window.umedEditor.createSection === "function") {
       try {
-        await window.UMDGGEditor.createSection(category.id, id, initialData);
-        location.hash = `#/${category.id}/${id}`;
+        await window.umedEditor.createSection(subject.id, category.id, id, initialData);
+        location.hash = `#/${subject.id}/${category.id}/${id}`;
       } catch (error) {
         console.error(error);
         alert(`Could not save the new Section: ${error.message}`);
@@ -803,15 +846,17 @@
   }
 
   async function handleAddCategory(insertIndex) {
-    const title = window.UMDGGComponents && window.UMDGGComponents.promptText
-      ? await window.UMDGGComponents.promptText("Title for the new Category:", { confirmLabel: "Add Category" })
+    const subject = activeSubject();
+    if (!subject) return;
+    const title = window.umedComponents && window.umedComponents.promptText
+      ? await window.umedComponents.promptText("Title for the new Category:", { confirmLabel: "Add Category" })
       : null;
     if (!title) return;
-    const id = uniqueId(title, index.categories.map(item => item.id));
+    const id = uniqueId(title, subject.categories.map(item => item.id));
     const newCategory = { id, title, order: 0, sections: [] };
 
-    index.categories.push(newCategory);
-    const siblings = sorted(index.categories.filter(item => item.id !== id));
+    subject.categories.push(newCategory);
+    const siblings = sorted(subject.categories.filter(item => item.id !== id));
     const clampedIndex = Math.max(0, Math.min(insertIndex, siblings.length));
     const assignedOrder = computeOrderForInsertion(siblings, clampedIndex);
     if (assignedOrder !== null) newCategory.order = assignedOrder;
@@ -824,10 +869,10 @@
     renderSidebar();
 
     const initialData = { schemaVersion: 1, title, content: { blocks: [{ type: "text", markdown: "" }] } };
-    if (window.UMDGGEditor && typeof window.UMDGGEditor.createCategory === "function") {
+    if (window.umedEditor && typeof window.umedEditor.createCategory === "function") {
       try {
-        await window.UMDGGEditor.createCategory(id, initialData);
-        location.hash = `#/${id}`;
+        await window.umedEditor.createCategory(subject.id, id, initialData);
+        location.hash = `#/${subject.id}/${id}`;
       } catch (error) {
         console.error(error);
         alert(`Could not save the new Category: ${error.message}`);
@@ -836,14 +881,15 @@
   }
 
   function navigate(target) {
-    if (!target.category) {
+    if (!target.subject) {
       location.hash = "#/";
+    } else if (!target.category) {
+      location.hash = `#/${target.subject.id}`;
     } else if (!target.section) {
-      location.hash = `#/${target.category.id}`;
+      location.hash = `#/${target.subject.id}/${target.category.id}`;
     } else {
-      location.hash = target.slide.id
-        ? `#/${target.category.id}/${target.section.id}/${target.slide.id}`
-        : `#/${target.category.id}/${target.section.id}`;
+      const sectionPath = `#/${target.subject.id}/${target.category.id}/${target.section.id}`;
+      location.hash = target.slide.id ? `${sectionPath}/${target.slide.id}` : sectionPath;
     }
   }
 
@@ -856,65 +902,128 @@
     const parts = decodeURIComponent(location.hash.replace(/^#\/?/, "")).split("/").filter(Boolean);
     elements.education.hidden = false;
 
-    if (parts.length > 3) {
-      setActiveRoute(null, null);
+    if (parts.length > 4) {
+      setActiveRoute(null, null, null);
       renderError();
       return;
     }
     if (!parts.length) {
-      setActiveRoute(null, null);
-      renderOverview("app-overview", "src/content/app-overview.js", "src/content", { kind: "app" });
+      setActiveRoute(null, null, null);
+      renderOverview("app-overview", `${CONTENT_ROOT}/app-overview.js`, CONTENT_ROOT, { kind: "app" });
       return;
     }
 
-    const category = index.categories.find(item => item.id === parts[0]);
-    if (!category) {
-      setActiveRoute(null, null);
+    const subject = index.subjects.find(item => item.id === parts[0]);
+    if (!subject) {
+      setActiveRoute(null, null, null);
       renderError();
       return;
     }
     if (parts.length === 1) {
-      setActiveRoute(category.id, null);
-      renderOverview(category.id, `src/content/${category.id}/category.js`, `src/content/${category.id}`,
-        { kind: "category", category });
+      setActiveRoute(subject.id, null, null);
+      renderOverview(subject.id, `${CONTENT_ROOT}/${subject.id}/subject.js`, `${CONTENT_ROOT}/${subject.id}`,
+        { kind: "subject", subject });
       return;
     }
 
-    const section = category.sections.find(item => item.id === parts[1]);
-    if (!section) {
-      setActiveRoute(null, null);
+    const category = subject.categories.find(item => item.id === parts[1]);
+    if (!category) {
+      setActiveRoute(null, null, null);
       renderError();
       return;
     }
     if (parts.length === 2) {
-      setActiveRoute(category.id, section.id);
-      renderSlide({ category, section, slide: sectionOverviewSlide(section) });
+      const key = `${subject.id}/${category.id}`;
+      setActiveRoute(subject.id, category.id, null);
+      renderOverview(key, `${CONTENT_ROOT}/${key}/category.js`, `${CONTENT_ROOT}/${key}`,
+        { kind: "category", subject, category });
       return;
     }
 
-    const slide = section.slides.find(item => item.id === parts[2]);
-    if (!slide) {
-      setActiveRoute(null, null);
+    const section = category.sections.find(item => item.id === parts[2]);
+    if (!section) {
+      setActiveRoute(null, null, null);
       renderError();
       return;
     }
-    setActiveRoute(category.id, section.id);
-    renderSlide({ category, section, slide });
+    if (parts.length === 3) {
+      setActiveRoute(subject.id, category.id, section.id);
+      renderSlide({ subject, category, section, slide: sectionOverviewSlide(section) });
+      return;
+    }
+
+    const slide = section.slides.find(item => item.id === parts[3]);
+    if (!slide) {
+      setActiveRoute(null, null, null);
+      renderError();
+      return;
+    }
+    setActiveRoute(subject.id, category.id, section.id);
+    renderSlide({ subject, category, section, slide });
   }
 
-  // Syncs the sidebar's highlighted Category/Section with the route just resolved, expanding
-  // the active Category (if any) so its Section stays visible, and re-renders so this works for
-  // every navigation path (Prev/Next, Slide menu, search results, back/forward), not just
-  // direct sidebar clicks.
-  function setActiveRoute(categoryId, sectionId) {
+  // Syncs the header Subject menu and the sidebar's highlighted Category/Section with the route
+  // just resolved, expanding the active Category (if any) so its Section stays visible, and
+  // re-renders so this works for every navigation path (Prev/Next, Slide menu, search results,
+  // back/forward), not just direct sidebar clicks. A null `subjectId` (App landing or error
+  // route) keeps the previously active Subject so the sidebar does not go blank.
+  function setActiveRoute(subjectId, categoryId, sectionId) {
+    if (subjectId && subjectId !== activeSubjectId) {
+      activeSubjectId = subjectId;
+      expandedCategoryId = null;
+    }
     activeCategoryId = categoryId;
     activeSectionId = sectionId;
     if (categoryId) expandedCategoryId = categoryId;
+    renderSubjectMenu();
     renderSidebar();
   }
 
+  // The header menu lists every Subject; choosing one opens that Subject's landing Slide.
+  function renderSubjectMenu() {
+    const subjects = sorted(index.subjects);
+    const current = activeSubject();
+    subjectMenu.wrapper.hidden = !subjects.length;
+    subjectMenu.label.textContent = current ? current.title : "Subjects";
+    subjectMenu.popup.replaceChildren();
+    for (const subject of subjects) {
+      const link = document.createElement("a");
+      link.href = `#/${subject.id}`;
+      link.setAttribute("role", "menuitem");
+      link.setAttribute("aria-current", String(Boolean(current && current.id === subject.id)));
+      link.textContent = subject.title;
+      subjectMenu.popup.append(link);
+    }
+  }
+
+  function setSubjectMenuOpen(open) {
+    subjectMenu.popup.hidden = !open;
+    subjectMenu.button.setAttribute("aria-expanded", String(open));
+  }
+
+  // The App landing Slide introduces the Subjects, each linking to its own landing Slide.
+  function renderSubjectList(parent) {
+    const subjects = sorted(index.subjects);
+    if (!subjects.length) return;
+    const wrapper = document.createElement("div");
+    wrapper.className = "text-block subject-list";
+    const heading = document.createElement("h2");
+    heading.textContent = "Subjects";
+    const list = document.createElement("ul");
+    for (const subject of subjects) {
+      const item = document.createElement("li");
+      const link = document.createElement("a");
+      link.href = `#/${subject.id}`;
+      link.textContent = subject.title;
+      item.append(link);
+      list.append(item);
+    }
+    wrapper.append(heading, list);
+    parent.append(wrapper);
+  }
+
   function renderError() {
-    renderOverview("routing-error", "src/content/routing-error.js", "src/content");
+    renderOverview("routing-error", `${CONTENT_ROOT}/routing-error.js`, CONTENT_ROOT);
   }
 
   function renderTrustedSources(blocks, parent, sectionKey) {
@@ -940,7 +1049,7 @@
     fileNames.forEach(fileName => {
       const item = document.createElement("li");
       const link = document.createElement("a");
-      link.href = `src/content/${sectionKey}/_trusted_sources/${encodeURIComponent(fileName)}`;
+      link.href = `${CONTENT_ROOT}/${sectionKey}/_trusted_sources/${encodeURIComponent(fileName)}`;
       const extension = fileName.includes(".") ? fileName.split(".").pop().toLowerCase() : "";
       if (browserViewableExtensions.has(extension)) link.target = "app_trusted_source";
       else link.download = fileName;
@@ -960,15 +1069,16 @@
     }
   }
 
-  // Renders a top-level overview or error Slide. Category overviews keep the toolbar visible for
-  // stable page layout, while controls that require a Section or authored Slide remain disabled.
+  // Renders a top-level overview or error Slide. Subject and Category overviews keep the toolbar
+  // visible for stable page layout, while controls that require a Section or authored Slide
+  // remain disabled.
   function renderOverview(key, src, assetBasePath, navigationTarget = null) {
-    const showToolbar = navigationTarget && navigationTarget.kind === "category";
+    const showToolbar = navigationTarget && (navigationTarget.kind === "category" || navigationTarget.kind === "subject");
     setChromeVisible(showToolbar);
     if (showToolbar) renderLevels(navigationTarget);
     updateHeaderNavigation(navigationTarget);
     const draw = () => {
-      if (window.UMDGGWidgetHost) window.UMDGGWidgetHost.destroyAll();
+      if (window.umedWidgetHost) window.umedWidgetHost.destroyAll();
       clearDataFileSubscriptions();
       elements.slide.replaceChildren();
       slidePromptContent = null;
@@ -984,6 +1094,7 @@
       for (const block of (data.content && data.content.blocks) || []) {
         if (block.type !== "trustedSources") renderBlock(block, elements.slide, assetBasePath);
       }
+      if (navigationTarget && navigationTarget.kind === "app") renderSubjectList(elements.slide);
       if (navigationTarget) renderBottomNavigation(navigationTarget, elements.slide);
     };
     currentDraw = draw;
@@ -1001,7 +1112,7 @@
   }
 
   function renderSlide(target) {
-    const { category, section, slide } = target;
+    const { subject, category, section, slide } = target;
     const isOverview = !slide.id;
     if (isOverview) setNotepadOpen(false);
     setChromeVisible(true);
@@ -1009,12 +1120,13 @@
     renderMenu(target);
     updateHeaderNavigation(target);
 
-    const key = isOverview ? `${category.id}/${section.id}` : `${category.id}/${section.id}/${slide.id}`;
+    const sectionKey = `${subject.id}/${category.id}/${section.id}`;
+    const key = isOverview ? sectionKey : `${sectionKey}/${slide.id}`;
     const src = isOverview
-      ? `src/content/${category.id}/${section.id}/section.js`
-      : `src/content/${category.id}/${section.id}/${slide.id}/slide.js`;
+      ? `${CONTENT_ROOT}/${sectionKey}/section.js`
+      : `${CONTENT_ROOT}/${key}/slide.js`;
     const draw = () => {
-      if (window.UMDGGWidgetHost) window.UMDGGWidgetHost.destroyAll();
+      if (window.umedWidgetHost) window.umedWidgetHost.destroyAll();
       clearDataFileSubscriptions();
       elements.slide.replaceChildren();
       elements.slide.scrollTop = 0;
@@ -1031,7 +1143,7 @@
       promptContent.append(heading);
 
       for (const block of data.content.blocks || []) {
-        if (block.type !== "gptFollowup" && block.type !== "trustedSources") renderBlock(block, promptContent, `src/content/${key}`);
+        if (block.type !== "gptFollowup" && block.type !== "trustedSources") renderBlock(block, promptContent, `${CONTENT_ROOT}/${key}`);
       }
       elements.slide.append(promptContent);
       slidePromptContent = promptContent;
@@ -1040,7 +1152,7 @@
       renderBottomNavigation(target, elements.slide);
     };
     currentDraw = draw;
-    const assetBasePath = `src/content/${key}`;
+    const assetBasePath = `${CONTENT_ROOT}/${key}`;
 
     if (contentStore[key]) {
       draw();
@@ -1084,7 +1196,7 @@
       notesButton.setAttribute("aria-label", notepadOpen ? "Hide slide notes" : "Show slide notes");
       notesButton.setAttribute("aria-pressed", String(notepadOpen));
       notesButton.title = notepadOpen ? "Hide slide notes" : "Show slide notes";
-      notesButton.innerHTML = (window.UMDGGIcons && window.UMDGGIcons.notepad) || "Notes";
+      notesButton.innerHTML = (window.umedIcons && window.umedIcons.notepad) || "Notes";
       notesButton.addEventListener("click", () => setNotepadOpen(!notepadOpen));
       notepadButton = notesButton;
       elements.levels.append(notesButton);
@@ -1098,7 +1210,7 @@
     chatButton.disabled = !isContentSlide;
     chatButton.setAttribute("aria-label", "Ask UM GPT");
     chatButton.title = "Ask UM GPT";
-    chatButton.innerHTML = (window.UMDGGIcons && window.UMDGGIcons.chatgpt) || "◉";
+    chatButton.innerHTML = (window.umedIcons && window.umedIcons.chatgpt) || "◉";
     chatButton.addEventListener("click", () => askUmGpt());
     umGptButton = chatButton;
     elements.levels.append(chatButton);
@@ -1170,8 +1282,9 @@
     // quoted teaching material sent to UM GPT.
     let slideText = (slidePromptContent || elements.slide).innerText.trim();
     slideText = slideText.replace(/\n/g, "\n> ");
-    const prompt = "I am a post-graduate learner in Molecular Genetic Pathology and Laboratory Genetics and Genomics. " +
-      "You are a professional and experienced practitioner and educator in those fields. " + 
+    const learnerLevel = identity.learnerLevel ? `${identity.learnerLevel} ` : "";
+    const prompt = `I am a ${learnerLevel}learner in ${identity.discipline || "this subject"}. ` +
+      "You are a professional and experienced practitioner and educator in that discipline. " + 
       "I would like further explanation on a teaching slide " +
       "I am reviewing whose text is quoted here.\n\n> " + slideText + "\n\n" +
       (followupQuestion ? `My follow-up question is: ${followupQuestion}\n\n` : "");
@@ -1271,7 +1384,7 @@
       slidesInLevel.forEach((slide, index) => {
         const link = document.createElement("a");
         link.className = "slide-menu-item";
-        link.href = `#/${target.category.id}/${target.section.id}/${slide.id}`;
+        link.href = `#/${target.subject.id}/${target.category.id}/${target.section.id}/${slide.id}`;
         link.textContent = slide.title;
         link.setAttribute("aria-current", String(slide.id === target.slide.id));
 
@@ -1324,7 +1437,7 @@
     const addButton = document.createElement("button");
     addButton.type = "button";
     addButton.className = "slide-menu-add";
-    addButton.innerHTML = (window.UMDGGIcons && window.UMDGGIcons.add) || "+";
+    addButton.innerHTML = (window.umedIcons && window.umedIcons.add) || "+";
     addButton.setAttribute("aria-label", `Add a Slide here in ${level}`);
     addButton.addEventListener("click", () => handleAddSlide(target, level, insertAtInLevel));
     spacer.append(addButton);
@@ -1383,9 +1496,9 @@
     return changed;
   }
 
-  function persistChangedSlides(categoryId, sectionId, changed) {
-    if (window.UMDGGEditor && typeof window.UMDGGEditor.persistSlideOrder === "function") {
-      window.UMDGGEditor.persistSlideOrder(categoryId, sectionId, changed).catch(error => {
+  function persistChangedSlides(subjectId, categoryId, sectionId, changed) {
+    if (window.umedEditor && typeof window.umedEditor.persistSlideOrder === "function") {
+      window.umedEditor.persistSlideOrder(subjectId, categoryId, sectionId, changed).catch(error => {
         console.error(error);
         alert(`Could not save Slide order: ${error.message}`);
       });
@@ -1402,7 +1515,7 @@
 
     const changed = insertSlideAtPosition(section, moved, toLevel, insertAtInLevel);
     renderMenu(target);
-    persistChangedSlides(target.category.id, section.id, changed);
+    persistChangedSlides(target.subject.id, target.category.id, section.id, changed);
   }
 
   // Generates a kebab-case id from a title, unique among `existingIds` — used for new Slides,
@@ -1436,8 +1549,8 @@
   // Creates a new Slide at the given Level/position from the Slides menu's "+" button. Every
   // Slide starts with a single empty text block; Editors add Question or other blocks afterward.
   async function handleAddSlide(target, level, insertAtInLevel) {
-    const slideDetails = window.UMDGGComponents && window.UMDGGComponents.promptNewSlide
-      ? await window.UMDGGComponents.promptNewSlide({
+    const slideDetails = window.umedComponents && window.umedComponents.promptNewSlide
+      ? await window.umedComponents.promptNewSlide({
         message: "Add a new Slide",
         confirmLabel: "Add Slide",
         nameFromTitle: slideNameFromTitle
@@ -1472,8 +1585,8 @@
     };
     const otherChanged = changed.filter(item => item !== newEntry);
 
-    if (window.UMDGGEditor && typeof window.UMDGGEditor.createSlide === "function") {
-      window.UMDGGEditor.createSlide(target.category.id, target.section.id, initialData, otherChanged)
+    if (window.umedEditor && typeof window.umedEditor.createSlide === "function") {
+      window.umedEditor.createSlide(target.subject.id, target.category.id, target.section.id, initialData, otherChanged)
         .then(() => navigate({ ...target, slide: newEntry }))
         .catch(error => {
           console.error(error);
@@ -1506,7 +1619,7 @@
     } else if (block.type === "image") {
       renderBlockMarkdown(block, parent);
       const imageSource = block.imageSource || "slide";
-      const imageBasePath = imageSource === "shared" ? "src/content/assets/images" : assetBasePath;
+      const imageBasePath = imageSource === "shared" ? `${CONTENT_ROOT}/assets/images` : assetBasePath;
       const fileNames = (block.fileName || block.src || "").split(/[\s,]+/).filter(Boolean);
       const maxWidths = (block.maxWidths || "").split(/[\s,]+/).filter(Boolean);
 
@@ -1533,14 +1646,14 @@
       if (block.center) container.classList.add("block--centered");
       container.style.maxWidth = resolveCssMaxWidth(block.maxWidth, DEFAULT_WIDGET_MAX_WIDTH);
       parent.append(container);
-      if (window.UMDGGWidgetHost) window.UMDGGWidgetHost.mount(container, block, assetBasePath);
+      if (window.umedWidgetHost) window.umedWidgetHost.mount(container, block, assetBasePath);
     } else if (block.type === "link") {
       renderBlockMarkdown(block, parent);
       const wrapper = document.createElement("p");
       wrapper.className = "link-block";
       const anchor = document.createElement("a");
       anchor.href = block.url || "";
-      anchor.target = "dgg-ed-external";
+      anchor.target = "umed-external";
       anchor.rel = "noopener noreferrer";
       anchor.textContent = block.label || block.url || "";
       wrapper.append(anchor);
@@ -1580,7 +1693,7 @@
       askButton.className = "gpt-followup-ask-button";
       askButton.title = "Ask UM GPT";
       askButton.setAttribute("aria-label", `Ask UM GPT: ${question}`);
-      askButton.innerHTML = (window.UMDGGIcons && window.UMDGGIcons.chatgpt) || "◉";
+      askButton.innerHTML = (window.umedIcons && window.umedIcons.chatgpt) || "◉";
       askButton.addEventListener("click", () => askUmGpt(question));
       item.append(askButton, text);
       list.append(item);
@@ -1611,7 +1724,7 @@
 
   // Renders a dataFile block's prompt followed inline by a small upload icon (matching the Editor
   // pane's image upload button) instead of an obtrusive native "Browse" button. The file is
-  // handed to window.UMDGGDataFiles, a session-lifetime registry any widget can read from,
+  // handed to window.umedDataFiles, a session-lifetime registry any widget can read from,
   // keyed by the block's `name` so the same upload is usable across Slides once loaded.
   function renderDataFileBlock(block, parent) {
     const wrapper = document.createElement("p");
@@ -1632,15 +1745,15 @@
     uploadButton.className = "data-file-upload-button";
     uploadButton.title = "Upload data file\u2026";
     uploadButton.setAttribute("aria-label", "Upload data file");
-    uploadButton.innerHTML = (window.UMDGGIcons && window.UMDGGIcons.upload) || "";
+    uploadButton.innerHTML = (window.umedIcons && window.umedIcons.upload) || "";
     uploadButton.addEventListener("click", () => uploadInput.click());
 
     const status = document.createElement("span");
     status.className = "data-file-status";
 
-    if (block.name && window.UMDGGDataFiles) {
+    if (block.name && window.umedDataFiles) {
       activeDataFileUnsubscribes.push(
-        window.UMDGGDataFiles.onChange(block.name, file => {
+        window.umedDataFiles.onChange(block.name, file => {
           status.textContent = file ? `Loaded: ${file.name}` : "";
         })
       );
@@ -1649,7 +1762,7 @@
     uploadInput.addEventListener("change", () => {
       const file = uploadInput.files && uploadInput.files[0];
       uploadInput.value = ""; // allow re-selecting the same file name to fire change again
-      if (file && block.name && window.UMDGGDataFiles) window.UMDGGDataFiles.set(block.name, file);
+      if (file && block.name && window.umedDataFiles) window.umedDataFiles.set(block.name, file);
     });
 
     wrapper.append(uploadButton, status, uploadInput);
@@ -1751,19 +1864,25 @@
   }
 
   // Groups the complete, deduplicated content-Slide match set into a result tree. Collapse
-  // decisions use raw per-Section/per-Category counts before anything is rendered, so common
-  // terms do not hide rarer matches merely because they appeared later in a fixed result cap.
+  // decisions use raw per-Section/per-Category/per-Subject counts before anything is rendered, so
+  // common terms do not hide rarer matches merely because they appeared later in a fixed result cap.
   function buildSearchResultsTree(matchingKeys) {
-    const categories = [];
-    const categoryById = new Map();
-    for (const { category, section, slide } of allContentSlides()) {
-      const key = `${category.id}/${section.id}/${slide.id}`;
+    const subjects = [];
+    const subjectById = new Map();
+    for (const { subject, category, section, slide } of allContentSlides()) {
+      const key = `${subject.id}/${category.id}/${section.id}/${slide.id}`;
       if (!matchingKeys.has(key)) continue;
-      let categoryEntry = categoryById.get(category.id);
+      let subjectEntry = subjectById.get(subject.id);
+      if (!subjectEntry) {
+        subjectEntry = { subject, categories: [], categoryById: new Map() };
+        subjectById.set(subject.id, subjectEntry);
+        subjects.push(subjectEntry);
+      }
+      let categoryEntry = subjectEntry.categoryById.get(category.id);
       if (!categoryEntry) {
         categoryEntry = { category, sections: [], sectionById: new Map() };
-        categoryById.set(category.id, categoryEntry);
-        categories.push(categoryEntry);
+        subjectEntry.categoryById.set(category.id, categoryEntry);
+        subjectEntry.categories.push(categoryEntry);
       }
       let sectionEntry = categoryEntry.sectionById.get(section.id);
       if (!sectionEntry) {
@@ -1773,16 +1892,24 @@
       }
       sectionEntry.slides.push(slide);
     }
-    return categories.map(categoryEntry => {
-      if (categoryEntry.sections.length >= 3) {
-        return { category: categoryEntry.category, sections: [] };
+    return subjects.map(subjectEntry => {
+      if (subjectEntry.categories.length >= 3) {
+        return { subject: subjectEntry.subject, categories: [] };
       }
       return {
-        category: categoryEntry.category,
-        sections: categoryEntry.sections.map(sectionEntry => ({
-          section: sectionEntry.section,
-          slides: sectionEntry.slides.length > 3 ? [] : sectionEntry.slides
-        }))
+        subject: subjectEntry.subject,
+        categories: subjectEntry.categories.map(categoryEntry => {
+          if (categoryEntry.sections.length >= 3) {
+            return { category: categoryEntry.category, sections: [] };
+          }
+          return {
+            category: categoryEntry.category,
+            sections: categoryEntry.sections.map(sectionEntry => ({
+              section: sectionEntry.section,
+              slides: sectionEntry.slides.length > 3 ? [] : sectionEntry.slides
+            }))
+          };
+        })
       };
     });
   }
@@ -1794,26 +1921,25 @@
 
     const matches = matchingSlideKeys(query);
     if (!matches.size) return;
-    for (const { category, sections } of buildSearchResultsTree(matches)) {
-      const categoryLink = document.createElement("a");
-      categoryLink.className = "search-results-category";
-      categoryLink.href = `#/${category.id}`;
-      categoryLink.textContent = category.title;
-      elements.results.append(categoryLink);
+    const addLink = (className, href, text) => {
+      const link = document.createElement("a");
+      link.className = className;
+      link.href = href;
+      link.textContent = text;
+      elements.results.append(link);
+    };
+    for (const { subject, categories } of buildSearchResultsTree(matches)) {
+      addLink("search-results-subject", `#/${subject.id}`, subject.title);
 
-      for (const { section, slides } of sections) {
-        const sectionLink = document.createElement("a");
-        sectionLink.className = "search-results-section";
-        sectionLink.href = `#/${category.id}/${section.id}`;
-        sectionLink.textContent = section.title;
-        elements.results.append(sectionLink);
+      for (const { category, sections } of categories) {
+        addLink("search-results-category", `#/${subject.id}/${category.id}`, category.title);
 
-        for (const slide of slides) {
-          const slideLink = document.createElement("a");
-          slideLink.className = "search-results-slide";
-          slideLink.href = `#/${category.id}/${section.id}/${slide.id}`;
-          slideLink.textContent = slide.title;
-          elements.results.append(slideLink);
+        for (const { section, slides } of sections) {
+          addLink("search-results-section", `#/${subject.id}/${category.id}/${section.id}`, section.title);
+
+          for (const slide of slides) {
+            addLink("search-results-slide", `#/${subject.id}/${category.id}/${section.id}/${slide.id}`, slide.title);
+          }
         }
       }
     }
@@ -1835,35 +1961,35 @@
     setSlideMenuExpanded(elements.presenterMenuToggle.getAttribute("aria-expanded") !== "true");
   });
 
-  elements.presenterPrevious.innerHTML = (window.UMDGGIcons && window.UMDGGIcons.previous) || "\u2190";
-  elements.presenterNext.innerHTML = (window.UMDGGIcons && window.UMDGGIcons.next) || "\u2192";
-  elements.presenterMenuToggle.innerHTML = (window.UMDGGIcons && window.UMDGGIcons.menu) || "\u2630";
-  elements.presenterWhiteboardToggle.innerHTML = (window.UMDGGIcons && window.UMDGGIcons.whiteboard) || "\u270e";
-  elements.presenterFontDecrease.innerHTML = (window.UMDGGIcons && window.UMDGGIcons.subtract) || "\u2212";
-  elements.presenterFontIncrease.innerHTML = (window.UMDGGIcons && window.UMDGGIcons.add) || "+";
-  elements.presenterModeToggle.innerHTML = (window.UMDGGIcons && window.UMDGGIcons.presenter) || "\u25b6";
-  elements.editorRefresh.innerHTML = (window.UMDGGIcons && window.UMDGGIcons.refresh) || "\u21bb";
+  elements.presenterPrevious.innerHTML = (window.umedIcons && window.umedIcons.previous) || "\u2190";
+  elements.presenterNext.innerHTML = (window.umedIcons && window.umedIcons.next) || "\u2192";
+  elements.presenterMenuToggle.innerHTML = (window.umedIcons && window.umedIcons.menu) || "\u2630";
+  elements.presenterWhiteboardToggle.innerHTML = (window.umedIcons && window.umedIcons.whiteboard) || "\u270e";
+  elements.presenterFontDecrease.innerHTML = (window.umedIcons && window.umedIcons.subtract) || "\u2212";
+  elements.presenterFontIncrease.innerHTML = (window.umedIcons && window.umedIcons.add) || "+";
+  elements.presenterModeToggle.innerHTML = (window.umedIcons && window.umedIcons.presenter) || "\u25b6";
+  elements.editorRefresh.innerHTML = (window.umedIcons && window.umedIcons.refresh) || "\u21bb";
 
   function reloadContentIndex() {
     return new Promise((resolve, reject) => {
       const script = document.createElement("script");
-      script.src = `src/content/content-index.js?reload=${Date.now()}`;
+      script.src = `${CONTENT_ROOT}/content-index.js?reload=${Date.now()}`;
       script.onload = () => {
         script.remove();
-        const refreshedIndex = window.UMDGGContentIndex;
-        if (!refreshedIndex || !Array.isArray(refreshedIndex.categories)) {
-          window.UMDGGContentIndex = index;
+        const refreshedIndex = window.umedAppContentIndex;
+        if (!refreshedIndex || !Array.isArray(refreshedIndex.subjects)) {
+          window.umedAppContentIndex = index;
           reject(new Error("The reloaded content index is invalid."));
           return;
         }
         Object.keys(index).forEach(key => { delete index[key]; });
         Object.assign(index, refreshedIndex);
-        window.UMDGGContentIndex = index;
+        window.umedAppContentIndex = index;
         resolve();
       };
       script.onerror = () => {
         script.remove();
-        window.UMDGGContentIndex = index;
+        window.umedAppContentIndex = index;
         reject(new Error("The content index could not be reloaded."));
       };
       document.head.append(script);
@@ -1875,8 +2001,8 @@
     try {
       await reloadContentIndex();
       contentReloadToken = Date.now().toString();
-      if (window.UMDGGWidgetHost && typeof window.UMDGGWidgetHost.invalidateScripts === "function") {
-        window.UMDGGWidgetHost.invalidateScripts();
+      if (window.umedWidgetHost && typeof window.umedWidgetHost.invalidateScripts === "function") {
+        window.umedWidgetHost.invalidateScripts();
       }
       if (currentInfo && currentInfo.key) delete contentStore[currentInfo.key];
       rebuildSearchIndex();
@@ -1918,7 +2044,7 @@
     elements.presenterModeToggle.setAttribute("aria-pressed", String(presenterModeActive));
     elements.presenterModeToggle.setAttribute("aria-label", presenterModeAction);
     elements.presenterModeToggle.title = presenterModeAction;
-    if (window.UMDGGPresenterWhiteboard) window.UMDGGPresenterWhiteboard.setPresenterMode(presenterModeActive);
+    if (window.umedPresenterWhiteboard) window.umedPresenterWhiteboard.setPresenterMode(presenterModeActive);
     setSlideMenuExpanded(false);
     elements.results.hidden = true;
     resolveRoute();
@@ -1948,7 +2074,7 @@
     elements.sidebarToggle.title = sidebarAction;
     elements.sidebar.toggleAttribute("inert", sidebarCollapsed);
   }
-  elements.sidebarToggle.innerHTML = (window.UMDGGIcons && window.UMDGGIcons.sidebarToggle) || "\u2630";
+  elements.sidebarToggle.innerHTML = (window.umedIcons && window.umedIcons.sidebarToggle) || "\u2630";
   elements.sidebarToggle.addEventListener("click", () => {
     sidebarCollapsed = !sidebarCollapsed;
     applySidebarCollapsed();
@@ -1992,6 +2118,16 @@
   });
   document.addEventListener("click", event => {
     if (!event.target.closest(".header-actions")) elements.results.hidden = true;
+    if (!event.target.closest("#subject-menu")) setSubjectMenuOpen(false);
+  });
+  subjectMenu.button.addEventListener("click", () => setSubjectMenuOpen(subjectMenu.popup.hidden));
+  subjectMenu.popup.addEventListener("click", event => {
+    if (event.target.closest("a")) setSubjectMenuOpen(false);
+  });
+  subjectMenu.wrapper.addEventListener("keydown", event => {
+    if (event.key !== "Escape" || subjectMenu.popup.hidden) return;
+    setSubjectMenuOpen(false);
+    subjectMenu.button.focus();
   });
   window.addEventListener("hashchange", resolveRoute);
   window.addEventListener("pagehide", flushPendingNote);
@@ -2017,12 +2153,13 @@
   }
 
   // Read-only hook for src/editor/editor.js: it never touches routing or contentStore directly
-  // through this object, only through window.UMDGGContent, so app.js stays the single source of
+  // through this object, only through window.umedAppContent, so app.js stays the single source of
   // truth for what is currently on screen.
-  window.UMDGGApp = {
+  window.umedApp = {
     refreshSlide: () => { if (currentDraw) currentDraw(); },
-    refreshNavigation: () => { renderSidebar(); rebuildSearchIndex(); },
+    refreshNavigation: () => { renderSubjectMenu(); renderSidebar(); rebuildSearchIndex(); },
     rebuildSearchIndex,
+    getActiveSubject: activeSubject,
     getCurrentSlideInfo: () => currentInfo
   };
 

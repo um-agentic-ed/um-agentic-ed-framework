@@ -1,9 +1,9 @@
 (function () {
   "use strict";
 
-  // Registry populated by each <widget>.js file: window.UMDGGWidgets['<category>/<section>/<slide>/<name>']
+  // Registry populated by each <widget>.js file: window.umedAppWidgets['<subject>/<category>/<section>/<slide>/<name>']
   // = { init(container) { ...; return destroy; } }. See AGENTS.md "Widget content blocks" for the contract.
-  window.UMDGGWidgets = window.UMDGGWidgets || {};
+  window.umedAppWidgets = window.umedAppWidgets || {};
 
   const loadedScripts = new Set(); // widget.js src values already appended to <head>, so returning to
                                     // a Slide doesn't re-fetch/re-execute its widget script.
@@ -31,7 +31,7 @@
     const src = `${assetBasePath}/${name}.js`;
 
     const start = () => {
-      const factory = window.UMDGGWidgets[key];
+      const factory = window.umedAppWidgets[key];
       if (!factory || typeof factory.init !== "function") {
         showPlaceholder(container, `Widget "${name}" has not been generated yet.`);
         return;
@@ -67,5 +67,5 @@
     reloadToken = Date.now().toString();
   }
 
-  window.UMDGGWidgetHost = { mount, destroyAll, invalidateScripts };
+  window.umedWidgetHost = { mount, destroyAll, invalidateScripts };
 })();

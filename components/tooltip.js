@@ -13,6 +13,6 @@
     }
   }
 
-  window.UMDGGComponents = window.UMDGGComponents || {};
-  window.UMDGGComponents.attachTooltip = attachTooltip;
+  window.umedComponents = window.umedComponents || {};
+  window.umedComponents.attachTooltip = attachTooltip;
 })();

@@ -13,7 +13,7 @@
 
   const REFRESH_DELAY_MS = 300;
   let refreshTimer = null;
-  let current = null; // { key, kind, assetBasePath, src } from app.js's umdgg:slide-loaded event
+  let current = null; // { key, kind, assetBasePath, src } from app.js's umed:slide-loaded event
   const dirtyKeys = new Set(); // keys with unsaved in-memory edits, tracked across navigation
   // Deep clones of each key's last-saved (or first-seen-this-session) content, used to revert
   // in-memory edits when Discard Changes is clicked. Refreshed after every successful save and
@@ -49,8 +49,8 @@
     markDirty();
     clearTimeout(refreshTimer);
     refreshTimer = setTimeout(() => {
-      if (window.UMDGGApp && typeof window.UMDGGApp.refreshSlide === "function") {
-        window.UMDGGApp.refreshSlide();
+      if (window.umedApp && typeof window.umedApp.refreshSlide === "function") {
+        window.umedApp.refreshSlide();
       }
     }, REFRESH_DELAY_MS);
   }
@@ -86,7 +86,7 @@
     return label;
   }
 
-  // Widget names double as their <widget-name>.js filename and window.UMDGGWidgets registry key
+  // Widget names double as their <widget-name>.js filename and window.umedAppWidgets registry key
   // (see AGENTS.md), so they must be kebab-case; this is the single source of truth for that,
   // used both live (widget name field blur) and as a save-time safety net (serializeContentFile).
   function toKebabCase(value) {
@@ -160,8 +160,8 @@
   }
 
   async function editorConfirm(message, options) {
-    return window.UMDGGComponents && window.UMDGGComponents.confirm
-      ? window.UMDGGComponents.confirm(message, options)
+    return window.umedComponents && window.umedComponents.confirm
+      ? window.umedComponents.confirm(message, options)
       : window.confirm(message);
   }
 
@@ -174,8 +174,8 @@
   }
 
   async function chooseFileRemovalAction(fileName, kind) {
-    if (!window.UMDGGComponents || !window.UMDGGComponents.chooseOption) return null;
-    return window.UMDGGComponents.chooseOption(
+    if (!window.umedComponents || !window.umedComponents.chooseOption) return null;
+    return window.umedComponents.chooseOption(
       `What should happen to ${kind} "${fileName}"?\n\nMoving it to _unused keeps a local cache that is ignored by Git.`,
       ["Move to _unused", "Permanently delete"]
     );
@@ -191,21 +191,21 @@
     if (evaluation.action === "confirm" && !(await editorConfirm(evaluation.message, {
       confirmLabel: "Add anyway", cancelLabel: "Cancel"
     }))) return;
-    if (!window.UMDGGEditorFS) {
+    if (!window.umedEditorFS) {
       alert("File system access is unavailable in this browser.");
       return;
     }
 
-    const rootHandle = await window.UMDGGEditorFS.getContentRootHandle();
+    const rootHandle = await window.umedEditorFS.getContentRootHandle();
     if (!rootHandle) return;
     const relativePath = trustedSourcesRelativePath(file.name);
     try {
-      const existingFile = await window.UMDGGEditorFS.getExistingFile(rootHandle, relativePath);
+      const existingFile = await window.umedEditorFS.getExistingFile(rootHandle, relativePath);
       if (existingFile && !(await editorConfirm(
         `A trusted source named "${file.name}" already exists in this Section. Overwrite it?`,
         { confirmLabel: "Overwrite", cancelLabel: "Keep existing" }
       ))) return;
-      await window.UMDGGEditorFS.writeBinaryFile(rootHandle, relativePath, file);
+      await window.umedEditorFS.writeBinaryFile(rootHandle, relativePath, file);
       block.files = Array.isArray(block.files) ? block.files : [];
       if (!block.files.includes(file.name)) block.files.push(file.name);
       rerenderSources();
@@ -220,23 +220,23 @@
     if (!isSectionLanding()) return;
     const action = await chooseFileRemovalAction(fileName, "trusted source");
     if (!action) return;
-    if (!window.UMDGGEditorFS) {
+    if (!window.umedEditorFS) {
       alert("File system access is unavailable in this browser.");
       return;
     }
-    const rootHandle = await window.UMDGGEditorFS.getContentRootHandle();
+    const rootHandle = await window.umedEditorFS.getContentRootHandle();
     if (!rootHandle) return;
     try {
       if (action === "Move to _unused") {
         const unusedPath = trustedSourcesUnusedPath(fileName);
-        const existing = await window.UMDGGEditorFS.getExistingFile(rootHandle, unusedPath);
+        const existing = await window.umedEditorFS.getExistingFile(rootHandle, unusedPath);
         if (existing && !(await editorConfirm(
           `An unused trusted source named "${fileName}" already exists. Replace it?`,
           { confirmLabel: "Replace", cancelLabel: "Cancel" }
         ))) return;
-        await window.UMDGGEditorFS.moveFile(rootHandle, trustedSourcesRelativePath(fileName), unusedPath);
+        await window.umedEditorFS.moveFile(rootHandle, trustedSourcesRelativePath(fileName), unusedPath);
       } else {
-        await window.UMDGGEditorFS.deleteFile(rootHandle, trustedSourcesRelativePath(fileName));
+        await window.umedEditorFS.deleteFile(rootHandle, trustedSourcesRelativePath(fileName));
       }
       block.files = (block.files || []).filter(name => name !== fileName);
       rerenderSources();
@@ -248,24 +248,24 @@
   }
 
   async function restoreTrustedSource(block, rerenderSources) {
-    if (!window.UMDGGEditorFS || !window.UMDGGComponents || !window.UMDGGComponents.chooseOption) return;
-    const rootHandle = await window.UMDGGEditorFS.getContentRootHandle();
+    if (!window.umedEditorFS || !window.umedComponents || !window.umedComponents.chooseOption) return;
+    const rootHandle = await window.umedEditorFS.getContentRootHandle();
     if (!rootHandle) return;
     const unusedDir = `${current.key}/_trusted_sources/_unused`;
     try {
-      const names = await window.UMDGGEditorFS.listFiles(rootHandle, unusedDir);
+      const names = await window.umedEditorFS.listFiles(rootHandle, unusedDir);
       if (!names.length) {
         alert("There are no unused trusted sources to restore.");
         return;
       }
-      const fileName = await window.UMDGGComponents.chooseOption("Choose a trusted source to restore:", names);
+      const fileName = await window.umedComponents.chooseOption("Choose a trusted source to restore:", names);
       if (!fileName) return;
       const activePath = trustedSourcesRelativePath(fileName);
-      if (await window.UMDGGEditorFS.getExistingFile(rootHandle, activePath)) {
+      if (await window.umedEditorFS.getExistingFile(rootHandle, activePath)) {
         alert(`A trusted source named "${fileName}" already exists in this Section.`);
         return;
       }
-      await window.UMDGGEditorFS.moveFile(rootHandle, `${unusedDir}/${fileName}`, activePath);
+      await window.umedEditorFS.moveFile(rootHandle, `${unusedDir}/${fileName}`, activePath);
       if (!block.files.includes(fileName)) block.files.push(fileName);
       rerenderSources();
       scheduleRefresh();
@@ -424,8 +424,8 @@
     textarea.addEventListener("input", () => { block.markdown = textarea.value; scheduleRefresh(); });
     autoSizeTextarea(textarea);
     const markdownField = field("Markdown text (optional)", textarea);
-    if (window.UMDGGComponents && window.UMDGGComponents.attachTooltip) {
-      window.UMDGGComponents.attachTooltip(markdownField.querySelector("span"), MARKDOWN_HELP_TEXT);
+    if (window.umedComponents && window.umedComponents.attachTooltip) {
+      window.umedComponents.attachTooltip(markdownField.querySelector("span"), MARKDOWN_HELP_TEXT);
     }
     return markdownField;
   }
@@ -464,20 +464,20 @@
 
   async function removeImageFile(fileName, block, rerenderImages) {
     const action = await chooseFileRemovalAction(fileName, "image");
-    if (!action || !window.UMDGGEditorFS) return;
-    const rootHandle = await window.UMDGGEditorFS.getContentRootHandle();
+    if (!action || !window.umedEditorFS) return;
+    const rootHandle = await window.umedEditorFS.getContentRootHandle();
     if (!rootHandle) return;
     try {
       if (action === "Move to _unused") {
         const unusedPath = imageUnusedPath(block, fileName);
-        const existing = await window.UMDGGEditorFS.getExistingFile(rootHandle, unusedPath);
+        const existing = await window.umedEditorFS.getExistingFile(rootHandle, unusedPath);
         if (existing && !(await editorConfirm(
           `An unused image named "${fileName}" already exists. Replace it?`,
           { confirmLabel: "Replace", cancelLabel: "Cancel" }
         ))) return;
-        await window.UMDGGEditorFS.moveFile(rootHandle, imageRelativePath(block, fileName), unusedPath);
+        await window.umedEditorFS.moveFile(rootHandle, imageRelativePath(block, fileName), unusedPath);
       } else {
-        await window.UMDGGEditorFS.deleteFile(rootHandle, imageRelativePath(block, fileName));
+        await window.umedEditorFS.deleteFile(rootHandle, imageRelativePath(block, fileName));
       }
       setImageFileNames(block, imageFileNames(block).filter(name => name !== fileName));
       rerenderImages();
@@ -489,24 +489,24 @@
   }
 
   async function restoreImageFile(block, rerenderImages) {
-    if (!window.UMDGGEditorFS || !window.UMDGGComponents || !window.UMDGGComponents.chooseOption) return;
-    const rootHandle = await window.UMDGGEditorFS.getContentRootHandle();
+    if (!window.umedEditorFS || !window.umedComponents || !window.umedComponents.chooseOption) return;
+    const rootHandle = await window.umedEditorFS.getContentRootHandle();
     if (!rootHandle) return;
     const unusedDir = `${imageRelativeDir(block)}/_unused`.replace(/^\//, "");
     try {
-      const names = await window.UMDGGEditorFS.listFiles(rootHandle, unusedDir);
+      const names = await window.umedEditorFS.listFiles(rootHandle, unusedDir);
       if (!names.length) {
         alert("There are no unused images to restore.");
         return;
       }
-      const fileName = await window.UMDGGComponents.chooseOption("Choose an image to restore:", names);
+      const fileName = await window.umedComponents.chooseOption("Choose an image to restore:", names);
       if (!fileName) return;
       const activePath = imageRelativePath(block, fileName);
-      if (await window.UMDGGEditorFS.getExistingFile(rootHandle, activePath)) {
+      if (await window.umedEditorFS.getExistingFile(rootHandle, activePath)) {
         alert(`An image named "${fileName}" already exists in this location.`);
         return;
       }
-      await window.UMDGGEditorFS.moveFile(rootHandle, imageUnusedPath(block, fileName), activePath);
+      await window.umedEditorFS.moveFile(rootHandle, imageUnusedPath(block, fileName), activePath);
       if (!imageFileNames(block).includes(fileName)) setImageFileNames(block, [...imageFileNames(block), fileName]);
       rerenderImages();
       scheduleRefresh();
@@ -518,11 +518,11 @@
 
   async function uploadImageFiles(files, block, rerenderImages) {
     if (!files.length || !current) return;
-    if (!window.UMDGGEditorFS) {
+    if (!window.umedEditorFS) {
       alert("File system access is unavailable in this browser.");
       return;
     }
-    const rootHandle = await window.UMDGGEditorFS.getContentRootHandle();
+    const rootHandle = await window.umedEditorFS.getContentRootHandle();
     if (!rootHandle) return; // Editor cancelled the folder access prompt.
 
     const existingNames = imageFileNames(block);
@@ -533,18 +533,18 @@
       if (file.type && !file.type.startsWith("image/")) continue; // guard against non-image picks
       const relativePath = imageRelativePath(block, file.name);
       try {
-        const existingFile = await window.UMDGGEditorFS.getExistingFile(rootHandle, relativePath);
+        const existingFile = await window.umedEditorFS.getExistingFile(rootHandle, relativePath);
         let overwrite = true;
         if (existingFile) {
           const message = existingFile.size === file.size
             ? `A file named "${file.name}" already exists here and is the same size \u2014 it looks like the same file. Overwrite it anyway?`
             : `A file named "${file.name}" already exists here but is a different size. Overwrite it with the uploaded file?`;
-          overwrite = window.UMDGGComponents && window.UMDGGComponents.confirm
-            ? await window.UMDGGComponents.confirm(message, { confirmLabel: "Overwrite", cancelLabel: "Keep existing" })
+          overwrite = window.umedComponents && window.umedComponents.confirm
+            ? await window.umedComponents.confirm(message, { confirmLabel: "Overwrite", cancelLabel: "Keep existing" })
             : true;
         }
         if (overwrite) {
-          await window.UMDGGEditorFS.writeBinaryFile(rootHandle, relativePath, file);
+          await window.umedEditorFS.writeBinaryFile(rootHandle, relativePath, file);
           wroteFile = true;
         }
         // Either way, the target folder now holds a file at this name, so it's safe to reference.
@@ -647,7 +647,7 @@
     collapseToggle.title = collapsed ? "Expand block" : "Collapse block";
     collapseToggle.setAttribute("aria-label", collapsed ? "Expand block" : "Collapse block");
     collapseToggle.setAttribute("aria-expanded", String(!collapsed));
-    collapseToggle.innerHTML = (window.UMDGGIcons && window.UMDGGIcons.chevron) || "";
+    collapseToggle.innerHTML = (window.umedIcons && window.umedIcons.chevron) || "";
     collapseToggle.addEventListener("click", event => {
       const expand = collapsedBlocks.has(block);
       if (event.ctrlKey || event.metaKey) {
@@ -666,8 +666,8 @@
     fieldset.append(legend);
 
     if (block.type === "text") {
-      if (window.UMDGGComponents && window.UMDGGComponents.attachTooltip) {
-        window.UMDGGComponents.attachTooltip(legend, MARKDOWN_HELP_TEXT);
+      if (window.umedComponents && window.umedComponents.attachTooltip) {
+        window.umedComponents.attachTooltip(legend, MARKDOWN_HELP_TEXT);
       }
       const textarea = document.createElement("textarea");
       textarea.value = block.markdown || "";
@@ -699,7 +699,7 @@
       promptCode.className = "editor-widget-prompt";
       const targetKey = current
         ? current.key
-        : sectionInstructions ? "<category>/<section>" : "<category>/<section>/<slide>";
+        : sectionInstructions ? "<subject>/<category>/<section>" : "<subject>/<category>/<section>/<slide>";
       promptCode.textContent = sectionInstructions
         ? `/fill-or-update-section ${targetKey}`
         : `/fill-or-update-slide ${targetKey}`;
@@ -709,7 +709,7 @@
       copyButton.className = "editor-icon-button";
       copyButton.title = "Copy prompt to clipboard";
       copyButton.setAttribute("aria-label", "Copy prompt to clipboard");
-      copyButton.innerHTML = (window.UMDGGIcons && window.UMDGGIcons.copy) || "";
+      copyButton.innerHTML = (window.umedIcons && window.umedIcons.copy) || "";
       copyButton.addEventListener("click", async () => {
         try {
           await navigator.clipboard.writeText(promptCode.textContent);
@@ -744,10 +744,10 @@
       });
       source.addEventListener("change", () => { block.imageSource = source.value; scheduleRefresh(); });
       const sourceField = field("Image source", source);
-      if (window.UMDGGComponents && window.UMDGGComponents.attachTooltip) {
-        window.UMDGGComponents.attachTooltip(
+      if (window.umedComponents && window.umedComponents.attachTooltip) {
+        window.umedComponents.attachTooltip(
           sourceField.querySelector("span"),
-          "Slide: /src/content/<category>/<section>/<slide>/; Shared: /src/content/assets/images/"
+          "Slide: /src/content/<subject>/<category>/<section>/<slide>/; Shared: /src/content/assets/images/"
         );
       }
       controls.append(sourceField);
@@ -757,8 +757,8 @@
       maxWidths.value = block.maxWidths || "";
       maxWidths.addEventListener("input", () => { block.maxWidths = maxWidths.value; scheduleRefresh(); });
       const maxWidthsField = field("Max width(s)", maxWidths);
-      if (window.UMDGGComponents && window.UMDGGComponents.attachTooltip) {
-        window.UMDGGComponents.attachTooltip(
+      if (window.umedComponents && window.umedComponents.attachTooltip) {
+        window.umedComponents.attachTooltip(
           maxWidthsField.querySelector("span"),
           'Space or comma-delimited CSS max-width values (e.g. "200px, 50%"), one per image file above, or a single value applied to all. Blank or invalid falls back to 50%.'
         );
@@ -785,7 +785,7 @@
       const promptCode = document.createElement("code");
       promptCode.className = "editor-widget-prompt";
       const updatePrompt = () => {
-        const slideKey = current ? current.key : "<category>/<section>/<slide>";
+        const slideKey = current ? current.key : "<subject>/<category>/<section>/<slide>";
         promptCode.textContent = `/create-or-update-widget ${slideKey} ${block.name || "<widget-name>"}`;
       };
 
@@ -813,8 +813,8 @@
       maxWidth.value = block.maxWidth || "";
       maxWidth.addEventListener("input", () => { block.maxWidth = maxWidth.value; scheduleRefresh(); });
       const maxWidthField = field("Max width", maxWidth);
-      if (window.UMDGGComponents && window.UMDGGComponents.attachTooltip) {
-        window.UMDGGComponents.attachTooltip(
+      if (window.umedComponents && window.umedComponents.attachTooltip) {
+        window.umedComponents.attachTooltip(
           maxWidthField.querySelector("span"),
           "Raw CSS max-width value (e.g. 90% or 600px) for the widget's wrapper. Blank or invalid falls back to 90%."
         );
@@ -851,7 +851,7 @@
       copyButton.className = "editor-icon-button";
       copyButton.title = "Copy prompt to clipboard";
       copyButton.setAttribute("aria-label", "Copy prompt to clipboard");
-      copyButton.innerHTML = (window.UMDGGIcons && window.UMDGGIcons.copy) || "";
+      copyButton.innerHTML = (window.umedIcons && window.umedIcons.copy) || "";
       copyButton.addEventListener("click", async () => {
         try {
           await navigator.clipboard.writeText(promptCode.textContent);
@@ -897,8 +897,8 @@
       extensions.value = block.extensions || "";
       extensions.addEventListener("input", () => { block.extensions = extensions.value; scheduleRefresh(); });
       const extensionsField = field("Allowed extensions", extensions);
-      if (window.UMDGGComponents && window.UMDGGComponents.attachTooltip) {
-        window.UMDGGComponents.attachTooltip(extensionsField.querySelector("span"), 'Space or comma-delimited, e.g. "csv, tsv"');
+      if (window.umedComponents && window.umedComponents.attachTooltip) {
+        window.umedComponents.attachTooltip(extensionsField.querySelector("span"), 'Space or comma-delimited, e.g. "csv, tsv"');
       }
       row.append(extensionsField);
       fieldset.append(row);
@@ -941,8 +941,8 @@
     removeButton.textContent = "X";
     removeButton.setAttribute("aria-label", "Remove block");
     removeButton.addEventListener("click", async () => {
-      const confirmed = window.UMDGGComponents && window.UMDGGComponents.confirm
-        ? await window.UMDGGComponents.confirm("Remove this block? This cannot be undone.", { confirmLabel: "Remove" })
+      const confirmed = window.umedComponents && window.umedComponents.confirm
+        ? await window.umedComponents.confirm("Remove this block? This cannot be undone.", { confirmLabel: "Remove" })
         : true;
       if (!confirmed) return;
       blocks.splice(index, 1);
@@ -1105,8 +1105,8 @@
     feedback.addEventListener("input", () => { choice.feedback = feedback.value; scheduleRefresh(); });
     autoSizeTextarea(feedback);
     const feedbackField = field("Feedback", feedback);
-    if (window.UMDGGComponents && window.UMDGGComponents.attachTooltip) {
-      window.UMDGGComponents.attachTooltip(
+    if (window.umedComponents && window.umedComponents.attachTooltip) {
+      window.umedComponents.attachTooltip(
         feedbackField.querySelector("span"),
         '"Correct." or "Incorrect." is prefixed automatically \u2014 no need to type it here.'
       );
@@ -1274,7 +1274,7 @@
   }
 
   function buildForm(info) {
-    const data = window.UMDGGContent[info.key];
+    const data = window.umedAppContent[info.key];
     if (!data) return;
     pane.replaceChildren();
     pane.scrollTop = 0;
@@ -1343,7 +1343,7 @@
   // The manifest duplicates titles used by sidebar/search and Slide navigation metadata. Every
   // saved content object therefore reconciles the corresponding manifest record.
   function syncIndexEntry(key, data, kind) {
-    const index = window.UMDGGContentIndex;
+    const index = window.umedAppContentIndex;
     if (!index) return;
     const path = key.split("/");
     if (kind === "overview" && path.length === 1) {
@@ -1390,26 +1390,26 @@
     for (const block of (data.content && data.content.blocks) || []) {
       if ((block.type === "widget" || block.type === "dataFile") && block.name) block.name = toKebabCase(block.name);
     }
-    const assignment = `window.UMDGGContent[${JSON.stringify(info.key)}] = ${JSON.stringify(data, null, 2)};\n`;
-    return info.kind === "slide" ? `window.UMDGGContent = window.UMDGGContent || {};\n${assignment}` : assignment;
+    const assignment = `window.umedAppContent[${JSON.stringify(info.key)}] = ${JSON.stringify(data, null, 2)};\n`;
+    return info.kind === "slide" ? `window.umedAppContent = window.umedAppContent || {};\n${assignment}` : assignment;
   }
 
-  // Loads a Slide's content object into window.UMDGGContent if it isn't already there (e.g. a
+  // Loads a Slide's content object into window.umedAppContent if it isn't already there (e.g. a
   // Slide that isn't the one currently on screen), so its on-disk order/level can be kept in
   // sync after a Slides menu drag-and-drop reorder without disturbing any unsaved edits already
   // held in memory for a Slide that is currently loaded.
   function loadSlideContent(key, src) {
-    if (window.UMDGGContent[key]) return Promise.resolve(window.UMDGGContent[key]);
+    if (window.umedAppContent[key]) return Promise.resolve(window.umedAppContent[key]);
     return new Promise((resolve, reject) => {
       const script = document.createElement("script");
       script.src = src;
-      script.onload = () => resolve(window.UMDGGContent[key]);
+      script.onload = () => resolve(window.umedAppContent[key]);
       script.onerror = () => reject(new Error(`Could not load ${src}`));
       document.head.append(script);
     });
   }
 
-  // Writes updated order/level values (from window.UMDGGContentIndex, already mutated by the
+  // Writes updated order/level values (from window.umedAppContentIndex, already mutated by the
   // Slides menu's drag-and-drop handler in app.js) back to each affected Slide's own slide.js
   // file, keeping in-memory unsaved edits for any currently-open Slide intact.
   async function writeSlideOrderFiles(rootHandle, categoryId, sectionId, slideIndexEntries) {
@@ -1420,20 +1420,20 @@
       if (!data) continue;
       data.order = entry.order;
       data.level = entry.level;
-      await window.UMDGGEditorFS.writeTextFile(rootHandle, `${key}/slide.js`, serializeContentFile({ kind: "slide", key }, data));
+      await window.umedEditorFS.writeTextFile(rootHandle, `${key}/slide.js`, serializeContentFile({ kind: "slide", key }, data));
       savedSnapshots.set(key, JSON.parse(JSON.stringify(data)));
       if (dirtyKeys.delete(key) && current && current.key === key) updateSaveButtonState();
     }
   }
 
   async function writeIndexFile(rootHandle) {
-    const indexContent = `window.UMDGGContentIndex = ${JSON.stringify(window.UMDGGContentIndex, null, 2)};\n`;
-    await window.UMDGGEditorFS.writeTextFile(rootHandle, "content-index.js", indexContent);
+    const indexContent = `window.umedAppContentIndex = ${JSON.stringify(window.umedAppContentIndex, null, 2)};\n`;
+    await window.umedEditorFS.writeTextFile(rootHandle, "content-index.js", indexContent);
   }
 
   async function persistSlideOrder(categoryId, sectionId, slideIndexEntries) {
-    if (!window.UMDGGEditorFS || !slideIndexEntries.length) return;
-    const rootHandle = await window.UMDGGEditorFS.getContentRootHandle();
+    if (!window.umedEditorFS || !slideIndexEntries.length) return;
+    const rootHandle = await window.umedEditorFS.getContentRootHandle();
     if (!rootHandle) return; // Editor cancelled the folder prompt; index stays updated in memory only.
 
     await writeSlideOrderFiles(rootHandle, categoryId, sectionId, slideIndexEntries);
@@ -1443,14 +1443,14 @@
   // Creates a new Slide's slide.js file (initial content built by app.js's "+" button in the
   // Slides menu) and rewrites any other Slides whose order/level shifted to make room for it.
   async function createSlide(categoryId, sectionId, data, otherChangedEntries) {
-    if (!window.UMDGGEditorFS) throw new Error("File system access is unavailable.");
-    const rootHandle = await window.UMDGGEditorFS.getContentRootHandle();
+    if (!window.umedEditorFS) throw new Error("File system access is unavailable.");
+    const rootHandle = await window.umedEditorFS.getContentRootHandle();
     if (!rootHandle) throw new Error("Folder access was cancelled.");
 
     const key = `${categoryId}/${sectionId}/${data.id}`;
     data.contentUpdatedAt = new Date().toISOString();
-    window.UMDGGContent[key] = data;
-    await window.UMDGGEditorFS.writeTextFile(rootHandle, `${key}/slide.js`, serializeContentFile({ kind: "slide", key }, data));
+    window.umedAppContent[key] = data;
+    await window.umedEditorFS.writeTextFile(rootHandle, `${key}/slide.js`, serializeContentFile({ kind: "slide", key }, data));
     await writeSlideOrderFiles(rootHandle, categoryId, sectionId, otherChangedEntries);
     await writeIndexFile(rootHandle);
   }
@@ -1459,8 +1459,8 @@
   // section.js overview files just hold title/content), so reordering them from the sidebar only
   // needs to rewrite that one file.
   async function persistIndex() {
-    if (!window.UMDGGEditorFS) return;
-    const rootHandle = await window.UMDGGEditorFS.getContentRootHandle();
+    if (!window.umedEditorFS) return;
+    const rootHandle = await window.umedEditorFS.getContentRootHandle();
     if (!rootHandle) return; // Editor cancelled the folder prompt; index stays updated in memory only.
     await writeIndexFile(rootHandle);
   }
@@ -1470,32 +1470,32 @@
   // only then is the original folder removed. Unsaved content could not be represented by that
   // disk copy, so require the Editor to save or discard it first.
   async function moveSection(fromCategoryId, toCategoryId, sectionId) {
-    if (!window.UMDGGEditorFS) throw new Error("File system access is unavailable.");
+    if (!window.umedEditorFS) throw new Error("File system access is unavailable.");
     const oldPrefix = `${fromCategoryId}/${sectionId}`;
     const newPrefix = `${toCategoryId}/${sectionId}`;
     if ([...dirtyKeys].some(key => key === oldPrefix || key.startsWith(`${oldPrefix}/`))) {
       throw new Error("Save or discard changes in this Section before moving it.");
     }
-    const rootHandle = await window.UMDGGEditorFS.getContentRootHandle();
+    const rootHandle = await window.umedEditorFS.getContentRootHandle();
     if (!rootHandle) throw new Error("Folder access was cancelled.");
 
     let copied = false;
     try {
-      await window.UMDGGEditorFS.copyDirectory(rootHandle, oldPrefix, newPrefix);
+      await window.umedEditorFS.copyDirectory(rootHandle, oldPrefix, newPrefix);
       copied = true;
-      await window.UMDGGEditorFS.replaceTextInJavaScriptFiles(rootHandle, newPrefix, oldPrefix, newPrefix);
+      await window.umedEditorFS.replaceTextInJavaScriptFiles(rootHandle, newPrefix, oldPrefix, newPrefix);
       await writeIndexFile(rootHandle);
     } catch (error) {
       // The source remains intact until the manifest is saved. Remove a partial copy so a failed
       // move does not leave an unindexed duplicate that can confuse later validation.
       if (copied) {
-        try { await window.UMDGGEditorFS.deleteDirectory(rootHandle, newPrefix); } catch (cleanupError) { console.error(cleanupError); }
+        try { await window.umedEditorFS.deleteDirectory(rootHandle, newPrefix); } catch (cleanupError) { console.error(cleanupError); }
       }
       throw error;
     }
 
     try {
-      await window.UMDGGEditorFS.deleteDirectory(rootHandle, oldPrefix);
+      await window.umedEditorFS.deleteDirectory(rootHandle, oldPrefix);
       return null;
     } catch (error) {
       // The new folder and manifest are already valid. Preserve that successful state rather
@@ -1508,36 +1508,36 @@
   // Creates a new Category's category.js overview file (from the sidebar's "+" button) and
   // updates content-index.js, which app.js has already mutated in memory.
   async function createCategory(categoryId, data) {
-    if (!window.UMDGGEditorFS) throw new Error("File system access is unavailable.");
-    const rootHandle = await window.UMDGGEditorFS.getContentRootHandle();
+    if (!window.umedEditorFS) throw new Error("File system access is unavailable.");
+    const rootHandle = await window.umedEditorFS.getContentRootHandle();
     if (!rootHandle) throw new Error("Folder access was cancelled.");
 
-    window.UMDGGContent[categoryId] = data;
-    await window.UMDGGEditorFS.writeTextFile(rootHandle, `${categoryId}/category.js`, serializeContentFile({ kind: "overview", key: categoryId }, data));
+    window.umedAppContent[categoryId] = data;
+    await window.umedEditorFS.writeTextFile(rootHandle, `${categoryId}/category.js`, serializeContentFile({ kind: "overview", key: categoryId }, data));
     await writeIndexFile(rootHandle);
   }
 
   // Creates a new Section's section.js overview file (from the sidebar's "+" button) and updates
   // content-index.js, which app.js has already mutated in memory.
   async function createSection(categoryId, sectionId, data) {
-    if (!window.UMDGGEditorFS) throw new Error("File system access is unavailable.");
-    const rootHandle = await window.UMDGGEditorFS.getContentRootHandle();
+    if (!window.umedEditorFS) throw new Error("File system access is unavailable.");
+    const rootHandle = await window.umedEditorFS.getContentRootHandle();
     if (!rootHandle) throw new Error("Folder access was cancelled.");
 
     const key = `${categoryId}/${sectionId}`;
-    window.UMDGGContent[key] = data;
-    await window.UMDGGEditorFS.writeTextFile(rootHandle, `${key}/section.js`, serializeContentFile({ kind: "overview", key }, data));
+    window.umedAppContent[key] = data;
+    await window.umedEditorFS.writeTextFile(rootHandle, `${key}/section.js`, serializeContentFile({ kind: "overview", key }, data));
     await writeIndexFile(rootHandle);
   }
 
   async function handleSave(info, button) {
-    const data = window.UMDGGContent[info.key];
-    if (!data || !window.UMDGGEditorFS) return;
+    const data = window.umedAppContent[info.key];
+    if (!data || !window.umedEditorFS) return;
     const originalLabel = button.textContent;
     button.disabled = true;
     button.textContent = "Saving\u2026";
     try {
-      const rootHandle = await window.UMDGGEditorFS.getContentRootHandle();
+      const rootHandle = await window.umedEditorFS.getContentRootHandle();
       if (!rootHandle) return; // Editor cancelled the folder prompt; leave changes pending.
 
       const savedData = savedSnapshots.get(info.key);
@@ -1546,12 +1546,12 @@
       }
 
       const relativePath = info.src.replace(/^src\/content\//, "");
-      await window.UMDGGEditorFS.writeTextFile(rootHandle, relativePath, serializeContentFile(info, data));
+      await window.umedEditorFS.writeTextFile(rootHandle, relativePath, serializeContentFile(info, data));
 
       syncIndexEntry(info.key, data, info.kind);
       if (info.kind === "slide" || info.kind === "overview") await writeIndexFile(rootHandle);
-      if (window.UMDGGApp && typeof window.UMDGGApp.refreshNavigation === "function") {
-        window.UMDGGApp.refreshNavigation();
+      if (window.umedApp && typeof window.umedApp.refreshNavigation === "function") {
+        window.umedApp.refreshNavigation();
       }
 
       dirtyKeys.delete(info.key);
@@ -1570,19 +1570,19 @@
   async function handleDiscard(info) {
     const snapshot = savedSnapshots.get(info.key);
     if (!snapshot || !dirtyKeys.has(info.key)) return;
-    const confirmed = window.UMDGGComponents && window.UMDGGComponents.confirm
-      ? await window.UMDGGComponents.confirm("Discard unsaved changes to this Slide?", { confirmLabel: "Discard", cancelLabel: "Cancel" })
+    const confirmed = window.umedComponents && window.umedComponents.confirm
+      ? await window.umedComponents.confirm("Discard unsaved changes to this Slide?", { confirmLabel: "Discard", cancelLabel: "Cancel" })
       : true;
     if (!confirmed) return;
 
-    window.UMDGGContent[info.key] = JSON.parse(JSON.stringify(snapshot));
+    window.umedAppContent[info.key] = JSON.parse(JSON.stringify(snapshot));
     dirtyKeys.delete(info.key);
     buildForm(info);
-    if (window.UMDGGApp && typeof window.UMDGGApp.refreshSlide === "function") window.UMDGGApp.refreshSlide();
+    if (window.umedApp && typeof window.umedApp.refreshSlide === "function") window.umedApp.refreshSlide();
   }
 
   function findCategoryEntry(categoryId) {
-    const index = window.UMDGGContentIndex;
+    const index = window.umedAppContentIndex;
     return index && (index.categories || []).find(category => category.id === categoryId);
   }
 
@@ -1621,17 +1621,17 @@
   }
 
   function removeCategoryIndexEntry(categoryId) {
-    const index = window.UMDGGContentIndex;
+    const index = window.umedAppContentIndex;
     if (!index) return;
     index.categories = (index.categories || []).filter(category => category.id !== categoryId);
   }
 
   async function handleDelete(info, button, deleteKind) {
-    if (!deleteKind || !window.UMDGGEditorFS) return;
-    const data = window.UMDGGContent[info.key];
+    if (!deleteKind || !window.umedEditorFS) return;
+    const data = window.umedAppContent[info.key];
     const nounLabel = deleteKind === "category" ? "Category" : deleteKind === "section" ? "Section" : "Slide";
-    const confirmed = window.UMDGGComponents && window.UMDGGComponents.confirm
-      ? await window.UMDGGComponents.confirm(
+    const confirmed = window.umedComponents && window.umedComponents.confirm
+      ? await window.umedComponents.confirm(
           `Delete ${nounLabel} "${data ? data.title : info.key}"? This permanently removes its folder from disk and cannot be undone.`,
           { confirmLabel: "Delete", cancelLabel: "Cancel" }
         )
@@ -1642,7 +1642,7 @@
     button.disabled = true;
     button.textContent = "Deleting\u2026";
     try {
-      const rootHandle = await window.UMDGGEditorFS.getContentRootHandle();
+      const rootHandle = await window.umedEditorFS.getContentRootHandle();
       if (!rootHandle) {
         // Editor cancelled the folder prompt; content is left in place.
         button.disabled = false;
@@ -1652,7 +1652,7 @@
 
       const relativePath = info.src.replace(/^src\/content\//, "");
       const folderPath = relativePath.split("/").slice(0, -1).join("/");
-      await window.UMDGGEditorFS.deleteDirectory(rootHandle, folderPath);
+      await window.umedEditorFS.deleteDirectory(rootHandle, folderPath);
 
       let nextHash;
       if (deleteKind === "slide") {
@@ -1669,7 +1669,7 @@
       }
       await writeIndexFile(rootHandle);
 
-      delete window.UMDGGContent[info.key];
+      delete window.umedAppContent[info.key];
       dirtyKeys.delete(info.key);
       savedSnapshots.delete(info.key);
 
@@ -1686,7 +1686,7 @@
     if (isEditorActive() && current) buildForm(current);
   }
 
-  window.addEventListener("umdgg:slide-loaded", event => {
+  window.addEventListener("umed:slide-loaded", event => {
     current = event.detail;
     refreshIfActive();
   });
@@ -1694,10 +1694,10 @@
   // Read-only-from-app.js's-perspective hook so the Slides menu's and sidebar's drag-and-drop
   // reordering and "+" add buttons can persist changes without duplicating file-serialization
   // logic.
-  window.UMDGGEditor = { persistSlideOrder, createSlide, persistIndex, createCategory, createSection, moveSection };
+  window.umedEditor = { persistSlideOrder, createSlide, persistIndex, createCategory, createSection, moveSection };
 
-  if (window.UMDGGApp && typeof window.UMDGGApp.getCurrentSlideInfo === "function") {
-    current = window.UMDGGApp.getCurrentSlideInfo();
+  if (window.umedApp && typeof window.umedApp.getCurrentSlideInfo === "function") {
+    current = window.umedApp.getCurrentSlideInfo();
     refreshIfActive();
   }
 })();

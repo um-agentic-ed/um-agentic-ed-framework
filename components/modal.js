@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  // Standard reusable confirmation modal. Call window.UMDGGComponents.confirm(message) and
+  // Standard reusable confirmation modal. Call window.umedComponents.confirm(message) and
   // await the returned promise (true = confirmed, false = cancelled/dismissed).
   let dialog = null;
 
@@ -86,11 +86,11 @@
     }));
   }
 
-  window.UMDGGComponents = window.UMDGGComponents || {};
-  window.UMDGGComponents.confirm = confirmAction;
+  window.umedComponents = window.umedComponents || {};
+  window.umedComponents.confirm = confirmAction;
 
   // Standard reusable single-line text prompt, used instead of the native window.prompt() (which
-  // some embedding contexts disallow). Call window.UMDGGComponents.promptText(message) and await
+  // some embedding contexts disallow). Call window.umedComponents.promptText(message) and await
   // the returned promise (the trimmed string, or null if cancelled/dismissed/empty).
   let promptDialog = null;
 
@@ -155,7 +155,7 @@
     });
   }
 
-  window.UMDGGComponents.promptText = promptText;
+  window.umedComponents.promptText = promptText;
 
   // New Slides need both a learner-facing title and a stable path identifier. This reusable
   // two-field prompt keeps that small authoring decision together without exposing the
@@ -264,11 +264,11 @@
     });
   }
 
-  window.UMDGGComponents.promptNewSlide = promptNewSlide;
+  window.umedComponents.promptNewSlide = promptNewSlide;
 
   // Reusable modal offering a small set of named button choices (e.g. "Add Section" / "Add
   // Category") plus Cancel, for places a plain OK/Cancel confirm isn't enough. Call
-  // window.UMDGGComponents.chooseOption(message, ["Choice A", "Choice B"]) and await the
+  // window.umedComponents.chooseOption(message, ["Choice A", "Choice B"]) and await the
   // returned promise (the chosen label, or null if cancelled/dismissed).
   let chooseDialog = null;
 
@@ -320,5 +320,5 @@
     });
   }
 
-  window.UMDGGComponents.chooseOption = chooseOption;
+  window.umedComponents.chooseOption = chooseOption;
 })();

@@ -114,7 +114,9 @@ The page layout and styles are mature and will not change frequently and not
 unless you are requested to change them. Use the existing codebase as your guide. 
 
 Hierarchical levels are reflected in the app:
-- Subjects are shown on the App landing Slide and switched via a popup in the header.
+- Subjects are shown on the App landing Slide and switched via a popup menu in the 
+  header, to the right of the app title. The sidebar shows the Categories of the 
+  current Subject, which stays selected on the App landing and error Slides.
 - The sidebar has:
     - A top-level entry for each Category in a Subject. Category Section 
       visibility is exclusive; inactive Categories are collapsed.
@@ -123,8 +125,34 @@ Hierarchical levels are reflected in the app:
 - One Slide occupies the content pane at a time (and the editor pane in Editor mode).
 
 App developers may brand their app in two ways:
-- color selections for the header background and text specific in `TODO.css`
+- color selections for the header and sidebar declared in the `app.css` file 
+  found in the parent root (see [App identity and branding](#app-identity-and-branding))
 - images or other content included on Slides
+
+## App identity and branding
+
+Values that differ between Apps, and that the Framework cannot derive from 
+content, are declared in two small files in the Parent root. Editors set them 
+once when creating an App, by hand or with the `set-app-identity` skill:
+- `app.js` assigns `window.umedAppIdentity`, an object with fields:
+  - `appUuid`: immutable canonical UUID v4 of the logical App. It must be 
+    unique per App and never change; Learner notes are keyed to it in 
+    IndexedDB and validated against it in exported notes files.
+  - `appName`: stable, filesystem-safe kebab-case name. It supplies the 
+    `<appName>.notes.json` export filename and notes file metadata; `appUuid`,
+    not `appName`, is authoritative when validating an imported notes file.
+  - `appTitle`: human-readable title, shown in both the app header and the 
+    browser tab. The HTML entrypoint carries no title of its own.
+  - `discipline`: the subject area Learners study, used with `learnerLevel` as 
+    context in prompts sent to AI chat assistants.
+  - `learnerLevel`: the typical Learner the App targets, as an adjective phrase 
+    that fits "I am a ___ learner" (e.g., "undergraduate", "post-graduate").
+- `app.css` sets CSS custom properties on `:root` that override Framework 
+  defaults: `--umed-brand-bg`, `--umed-brand-text`, `--umed-brand-hover-bg`, 
+  `--umed-brand-border` and `--umed-brand-accent`. 
+
+The HTML entrypoint loads the Framework stylesheet before `app.css`, and `app.js`
+before any Framework script.
 
 # Routing
 - The hierarchical path to the current content is reflected in the visible URL.
@@ -141,7 +169,8 @@ App developers may brand their app in two ways:
   - The Slide for URL `#/<subject>` is read from landing slide
     `/src/content/<subject>/subject.js`.
   - The Slide for a URL with no hashed route, an empty hash `#`, or the root  
-    hash `#/` is read from `/src/content/app_overview.js`.
+    hash `#/` is read from `/src/content/app-overview.js`. This landing Slide also 
+    lists links to all Subjects.
 - An invalid route displays the error Slide in `/src/content/routing-error.js`.
 
 # Searching
@@ -234,8 +263,8 @@ repository that wraps this instance of the `um-agentic-ed-framework` repository.
 ```text
 /                    Root of the `um-agentic-ed-parent` clone 
   .github/prompts/   Agent prompts that describe common repeated tasks
-  app.css            A few App-specific branding styles.
-  app.js             Top-level declarations of app identity.
+  app.css            App-specific branding colors as CSS custom properties.
+  app.js             Top-level App identity declared as window.umedAppIdentity.
   <app-target>.html  App HTML entrypoint, renamed as required by the App from index.html
   src/               Generated app code and structured educational content
 ```
@@ -270,7 +299,7 @@ repository that wraps this instance of the `um-agentic-ed-framework` repository.
     images/                Image asset files
   <subject>/               Folder for a first-level Subject in the header popup
     subject.js             Landing slide shown to introduce a Subject
-    <category>/            Folder for a second-level Category in the sidebar navigator
+    <subject>/<category>/            Folder for a second-level Category in the sidebar navigator
       category.js          Landing slide shown to introduce a Category
       <section>/           Folder for a nested third-level Section in the sidebar navigator
         AGENTS.md          Content generation instructions that apply to all Section Slides 
@@ -299,13 +328,18 @@ Content files:
 - Must be loadable by a web browser accessing local files without hitting CORS 
   restrictions.
 - Are therefore stored as one Javascript file per Slide loaded via
-  `<script src="/src/content/<category>/<section>/<slide>/slide.js">`,
-  which assigns the Slide object to `window.UMDGGContent['<category>/<section>/<slide>']`.
+  `<script src="/src/content/<subject>/<category>/<section>/<slide>/slide.js">`,
+  which assigns the Slide object to `window.umedAppContent['<subject>/<category>/<section>/<slide>']`.
+- Landing Slides (`subject.js`, `category.js`, `section.js`) are loaded the same way
+  and assigned to the key made of their folder path, i.e.,
+  `window.umedAppContent['<subject>']`, `window.umedAppContent['<subject>/<category>']`
+  and `window.umedAppContent['<subject>/<category>/<section>']`. The App landing and
+  error Slides use the keys `app-overview` and `routing-error`.
 
 ## Slide fields
 
 Every Slide has the following top-level fields:
-- `id`, a kebab-case unique identifier, unique within its `<category>/<section>`
+- `id`, a kebab-case unique identifier, unique within its `<subject>/<category>/<section>`
 - `uuid`, an immutable canonical UUID v4 that uniquely identifies the Slide
   independently of its route. It is generated once when the Slide is created,
   is preserved when the Slide is edited, renamed, reordered, or moved, and is
@@ -350,7 +384,7 @@ type-specific fields:
   or omitted, left-aligns it), and `attribution`
   (a string with source name/link, or `null` for original content).
 - `link` block: An external web site URL that opens via an `<a>` tag into a new 
-  browser tab named `dgg-ed-external`, with a `label` and a `url` field for 
+  browser tab named `umed-external`, with a `label` and a `url` field for 
   constructing its tag.
 - `widget` block: `name` field used for widget naming of `<widget>.js` files, 
   `maxWidth` field with a raw CSS `max-width` value applied to the widget's
@@ -419,46 +453,44 @@ type-specific fields:
 
 # Content index file format and behavior
 
-`content-index.js` is the single manifest of all Category, Section, and Slide
+`content-index.js` is the single manifest of all Subject, Category, Section, and Slide
 metadata. It allows the app to build the sidebar, validate routes, and search
 content without loading every `slide.js` file, preserving load efficiency.
 
 ## Loading and structure
 - Loaded once via `<script src="/src/content/content-index.js">`, which
-  assigns the index to `window.UMDGGContentIndex`.
+  assigns the index to `window.umedAppContentIndex`.
 - Structured as a nested object mirroring the content hierarchy:
 
 ```js
-window.UMDGGContentIndex = {
+window.umedAppContentIndex = {
   schemaVersion: 2,
-  appUuid: 'f8d75ffe-cb50-4c4e-b172-8a557ec14745',
-  appName: 'um-dgg-ed',
-  categories: [
+  subjects: [
     {
       id: 'basic-genetics',
       title: 'Basic Genetics',
       order: 10,
-      sections: [
+      categories: [
         {
-          id: 'dna-structure',
-          title: 'DNA Structure',
+          id: 'dna-and-rna',
+          title: 'DNA and RNA',
           order: 10,
-          slides: [
+          sections: [
             {
-              id: 'base-pairs',
-              uuid: 'd8a7e374-1928-4b1e-87f3-84c8739a2ae9',
-              title: 'Base Pairs',
-              level: 'foundations',
-              order: 120,
-              keywords: ['adenine', 'base', 'complementary', 'cytosine', 'guanine', 'pairs', 'thymine']
-            },
-            {
-              id: 'check-your-understanding',
-              uuid: '8b3aac5d-0f4e-4c6e-9b64-e42f107bd176',
-              title: 'Check Your Understanding',
-              level: 'foundations',
-              order: 130,
-              keywords: ['adenine', 'base', 'pairs']
+              id: 'dna-structure',
+              title: 'DNA Structure',
+              order: 10,
+              slides: [
+                {
+                  id: 'base-pairs',
+                  uuid: 'd8a7e374-1928-4b1e-87f3-84c8739a2ae9',
+                  title: 'Base Pairs',
+                  level: 'foundations',
+                  order: 120,
+                  keywords: ['adenine', 'base', 'complementary', 'cytosine', 'guanine', 'pairs', 'thymine'],
+                  keywordsUpdatedAt: '2026-10-03T19:39:06.309Z'
+                }
+              ]
             }
           ]
         }
@@ -468,7 +500,7 @@ window.UMDGGContentIndex = {
 };
 ```
 
-- `categories[].order` and `sections[].order` determine sidebar display order
+- `subjects[].order`, `categories[].order` and `sections[].order` determine display order
   and default "first Section"/"first Slide" navigation targets, using the
   same spaced-increment convention as Slide `order`.
 - `slides[].keywords` is an Agent-generated array of searchable terms used
@@ -484,14 +516,8 @@ window.UMDGGContentIndex = {
   because an indexing pass runs.
 - The index does **not** duplicate full Slide `content`; only fields needed
   for navigation, routing, and search are present.
-- `appUuid` is the immutable canonical UUID v4 for the logical educational app.
-  It remains the same across clones, deployments, repository renames, and app
-  updates. A future new-app creation workflow must generate a new value for a
-  logically distinct app.
-- `appName` is a stable, filesystem-safe kebab-case name established when an
-  app is created. It supplies the `<appName>.notes.json` export filename and
-  human-readable file metadata; `appUuid`, not `appName`, is authoritative when
-  validating an imported notes file.
+- App identity (`appUuid`, `appName`) is not stored in the index; it is declared 
+  in the Parent root `app.js` (see [App identity and branding](#app-identity-and-branding)).
 - `slides[].uuid` is the same immutable UUID stored in the corresponding
   `slide.js`; it provides stable Slide identity when routes change.
 
@@ -605,7 +631,7 @@ When generating content for a Section, you should:
   In either case, the widget block's `instructions` should carry the Agent 
   instructions for creating the widget along with `AGENTS.md`.
 - Approved widget libraries are loaded once via pinned CDN `<script>`/`<link>`
-  tags in `um-dgg-ed.html` and are available globally to every `<widget>.js`
+  tags in `<app-target>.html` and are available globally to every `<widget>.js`
   file:
   - **Chart.js** for all plots and charts.
   - **Tabulator** for all interactive data tables.
@@ -613,13 +639,13 @@ When generating content for a Section, you should:
     neither library can reasonably support a requested widget, ask the Editor
     before adding a new one (see Code standards).
 - Widget host contract: every `<widget>.js` file assigns a factory to
-  `window.UMDGGWidgets['<category>/<section>/<slide>/<widget-name>']` with an
+  `window.umedAppWidgets['<subject>/<category>/<section>/<slide>/<widget-name>']` with an
   `init(container)` method that builds the Chart.js/Tabulator instance (and any
   HTML input controls that make it interactive) inside `container`, and
   returns a `destroy()` callback used to tear the instance down when the
   Learner navigates away:
   ```js
-  window.UMDGGWidgets['basic-genetics/dna-structure/base-pairs/interactive-plot'] = {
+  window.umedAppWidgets['basic-genetics/dna-structure/base-pairs/interactive-plot'] = {
     init(container) {
       const canvas = document.createElement('canvas');
       container.append(canvas);
@@ -684,16 +710,16 @@ When generating content for a Section, you should:
   pane's image upload button); clicking it opens a native file picker
   restricted to `extensions`. 
 - `src/components/data-files.js` is shared, generic infrastructure providing
-  `window.UMDGGDataFiles`, a session-lifetime, in-memory registry of uploaded
+  `window.umedDataFiles`, a session-lifetime, in-memory registry of uploaded
   files keyed by a `dataFile` block's `name`. It is the only app code that
   stores or looks up an uploaded file, and it never touches disk. A
   `<widget>.js` file reads a Learner-uploaded file via:
-  - `window.UMDGGDataFiles.get(name)` \u2192 the raw `File`, or `undefined` if not
+  - `window.umedDataFiles.get(name)` \u2192 the raw `File`, or `undefined` if not
     yet uploaded.
-  - `window.UMDGGDataFiles.getText(name)` / `.getArrayBuffer(name)` \u2192 a
+  - `window.umedDataFiles.getText(name)` / `.getArrayBuffer(name)` \u2192 a
     Promise for the file's contents, for widgets to parse themselves (no CSV
     or similar parsing library is approved; see Widget content blocks).
-  - `window.UMDGGDataFiles.onChange(name, callback)` \u2192 registers
+  - `window.umedDataFiles.onChange(name, callback)` \u2192 registers
     `callback(file)` for whenever `name`'s file is uploaded or replaced,
     calling it immediately if a file is already loaded (e.g. uploaded from a
     different Slide earlier in the session). Returns an unsubscribe function

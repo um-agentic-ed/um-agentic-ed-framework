@@ -30,7 +30,7 @@
   let restoring = false;
   let clipboard = null;
 
-  const icons = window.UMDGGIcons || {};
+  const icons = window.umedIcons || {};
   toolButtons.forEach(button => {
     const tool = button.dataset.whiteboardTool;
     button.innerHTML = icons[tool] || tool;
@@ -406,11 +406,11 @@
       undoButton.click();
     }
   });
-  window.addEventListener("umdgg:slide-loaded", event => loadRoute(event.detail && event.detail.key));
+  window.addEventListener("umed:slide-loaded", event => loadRoute(event.detail && event.detail.key));
 
   toggle.hidden = true;
   updateActions();
-  window.UMDGGPresenterWhiteboard = {
+  window.umedPresenterWhiteboard = {
     setPresenterMode(active) {
       presenterModeActive = Boolean(active);
       toggle.hidden = !presenterModeActive;

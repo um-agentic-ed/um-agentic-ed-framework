@@ -50,5 +50,5 @@
     });
   }
 
-  window.UMDGGDataFiles = { has, get, getText, getArrayBuffer, onChange, set };
+  window.umedDataFiles = { has, get, getText, getArrayBuffer, onChange, set };
 })();

@@ -1,5 +1,23 @@
-# um-agentic-ed-parent
+# um-agentic-ed
 
+`um-agentic-ed` is a system for building education web apps that are interactive,
+dynamically updatable by educators, and designed to:
+- Promote progressive, self-guided learning.
+- Foster team learning.
+- Exploit generative AI use by both educators and learners.
+
+The system was developed at the University of Michigan but is freely usable by 
+anyone.
+
+# um-agentic-ed-framework
+
+This repository, `um-agentic-ed-framework`, defines the structure and assembly of 
+`um-agentic-ed` apps whose content is defined by copies of the
+ [um-agentic-ed-parent](https://github.com/wilsonte-umich/um-agentic-ed-parent)
+repository.
+
+`um-agentic-ed-framework` is loaded by instructions in the parent repository. 
+The framework repository is almost never used on its own.
 
 ## AI notice
 

@@ -7,8 +7,8 @@
   let rootHandlePromise = null;
 
   async function pickContentRoot() {
-    const explainAndProceed = window.UMDGGComponents && window.UMDGGComponents.confirm
-      ? window.UMDGGComponents.confirm(
+    const explainAndProceed = window.umedComponents && window.umedComponents.confirm
+      ? window.umedComponents.confirm(
           `Saving needs one-time access to this project's "${CONTENT_ROOT_LABEL}" folder. ` +
           `In the next dialog, browse into your local copy of this project and select the ` +
           `"${CONTENT_ROOT_LABEL}" folder itself (not the project root, and not a folder inside it), then choose it.`,
@@ -20,15 +20,15 @@
 
     let handle;
     try {
-      handle = await window.showDirectoryPicker({ id: "umdgg-content", mode: "readwrite" });
+      handle = await window.showDirectoryPicker({ id: "umed-content", mode: "readwrite" });
     } catch (error) {
       if (error && error.name === "AbortError") return null;
       throw error;
     }
 
     if (handle.name !== "content") {
-      const useAnyway = window.UMDGGComponents && window.UMDGGComponents.confirm
-        ? await window.UMDGGComponents.confirm(
+      const useAnyway = window.umedComponents && window.umedComponents.confirm
+        ? await window.umedComponents.confirm(
             `You selected "${handle.name}", but this app expects the "${CONTENT_ROOT_LABEL}" folder. Use it anyway?`,
             { confirmLabel: "Use this folder", cancelLabel: "Pick again" }
           )
@@ -203,7 +203,7 @@
     await visit(directory);
   }
 
-  window.UMDGGEditorFS = {
+  window.umedEditorFS = {
     getContentRootHandle,
     writeTextFile: writeFile,
     writeBinaryFile: writeFile,

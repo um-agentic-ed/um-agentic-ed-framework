@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const DATABASE_NAME = "umdgg-learner-notes";
+  const DATABASE_NAME = "umed-learner-notes";
   const DATABASE_VERSION = 1;
   const STORE_NAME = "notes";
   let databasePromise = null;
@@ -178,5 +178,5 @@
     });
   }
 
-  window.UMDGGLearnerNotes = { getNote, saveNote, getAllNotes, replaceAllNotes };
+  window.umedLearnerNotes = { getNote, saveNote, getAllNotes, replaceAllNotes };
 })();
