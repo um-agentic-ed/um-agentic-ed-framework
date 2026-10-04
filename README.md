@@ -11,7 +11,7 @@ anyone, with rebranding support.
 
 This repository, `um-agentic-ed-framework`, defines the structure and assembly  
 of `um-agentic-ed` apps whose content is defined by descendent copies of the
-[um-agentic-ed-parent](https://github.com/wilsonte-umich/um-agentic-ed-parent)
+[um-agentic-ed-parent](https://github.com/um-agentic-ed/um-agentic-ed-parent)
 repository.
 
 `um-agentic-ed-framework` is loaded by usage instructions in the parent 

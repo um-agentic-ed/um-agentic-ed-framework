@@ -128,7 +128,7 @@ Hierarchical levels are reflected in the app:
 - When `subjectsEnabled` is false, the Subject level remains in content storage,
   content keys, and URL paths but is hidden everywhere in the UI. The App has
   exactly one structural Subject whose id and title are both
-  `<appName>-subject`; its landing Slide has an empty `content.blocks` array.
+  `app-subject`; its landing Slide has an empty `content.blocks` array.
 - The sidebar has:
     - A top-level entry for each Category in a Subject. Category Section 
       visibility is exclusive; inactive Categories are collapsed.
@@ -158,7 +158,7 @@ once when creating an App, by hand or with the `set-app-identity` skill:
   - `subjectsEnabled`: boolean indicating whether the Subject level is visible
     and editable in the App UI. Omitted values behave as `true` for backward
     compatibility. When `false`, the single structural Subject follows the
-    `<appName>-subject` invariant described above.
+    `app-subject` invariant described above.
   - `discipline`: the subject area Learners study, used with `learnerLevel` as 
     context in prompts sent to AI chat assistants.
   - `learnerLevel`: the typical Learner the App targets, as an adjective phrase 
@@ -276,8 +276,8 @@ Parent `app.css`, and the Parent `app.js` before any Framework script.
 - Because matching keywords are not themselves displayed in the match list,
   and because any single instance on a Slide is sufficient to generate a query
   match, keyword stores should be maintained as deduplicated lowercase strings.
-- When Subjects are suppressed, search-result links retain the default Subject
-  id in their URLs but the result tree begins with Categories. Subject labels
+- When Subjects are suppressed, search-result links retain the `app-subject` id
+  in their URLs but the result tree begins with Categories. Subject labels
   and Subject-only collapsed results are not shown.
 
 # File tree
@@ -577,7 +577,7 @@ window.umedAppContentIndex = {
   be used as Subject ids; Editor Mode adds a numeric suffix if a title would
   produce one.
 - A Subject-suppressed App has exactly one Subject entry. Its `id` and `title`
-  both equal `<appName>-subject`, its matching `subject.js` landing Slide has no
+  both equal `app-subject`, its matching `subject.js` landing Slide has no
   Blocks, and all Category, Section, and Slide routes still begin with its id.
 - App identity (`appUuid`, `appName`, `subjectsEnabled`) is not stored in the
   index; it is declared

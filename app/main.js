@@ -129,12 +129,11 @@
   // Existing Apps that predate this setting continue to use visible Subjects. A suppressed App
   // retains one structural Subject so content keys and routes never need a second schema.
   const subjectsEnabled = identity.subjectsEnabled !== false;
-  const defaultSubjectId = `${identity.appName || ""}-subject`;
+  const defaultSubjectId = "app-subject";
   const defaultSubject = !subjectsEnabled && index.subjects.length === 1
     ? index.subjects[0]
     : null;
   if (!subjectsEnabled && (
-    !identity.appName ||
     !defaultSubject ||
     defaultSubject.id !== defaultSubjectId ||
     defaultSubject.title !== defaultSubjectId
