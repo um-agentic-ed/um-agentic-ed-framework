@@ -154,6 +154,8 @@
   let sharedNotes = null;
   let viewingSharedNotes = false;
   let contentReloadToken = "";
+  let routeResolutionVersion = 0;
+  const contentLoadPromises = new Map();
   let sidebarCollapsed = false;
   const UMED_GPT_WINDOW_NAME = "umed-chatbot";
   const NOTES_FILE_FORMAT = "umed-learner-notes";
@@ -618,6 +620,73 @@
       ])
     ])
   ];
+
+  function targetContent(target) {
+    if (!target || target.kind === "app" || !target.subject) {
+      return { key: "app-overview", src: `${CONTENT_ROOT}/app-overview.js` };
+    }
+    if (target.kind === "subject" || !target.category) {
+      return { key: target.subject.id, src: `${CONTENT_ROOT}/${target.subject.id}/subject.js` };
+    }
+    const categoryKey = `${target.subject.id}/${target.category.id}`;
+    if (target.kind === "category" || !target.section) {
+      return { key: categoryKey, src: `${CONTENT_ROOT}/${categoryKey}/category.js` };
+    }
+    const sectionKey = `${categoryKey}/${target.section.id}`;
+    if (!target.slide || !target.slide.id) {
+      return { key: sectionKey, src: `${CONTENT_ROOT}/${sectionKey}/section.js` };
+    }
+    const key = `${sectionKey}/${target.slide.id}`;
+    return { key, src: `${CONTENT_ROOT}/${key}/slide.js` };
+  }
+
+  function loadTargetContent(target) {
+    const { key, src } = targetContent(target);
+    if (contentStore[key]) return Promise.resolve(contentStore[key]);
+    const requestKey = `${src}|${contentReloadToken}`;
+    if (contentLoadPromises.has(requestKey)) return contentLoadPromises.get(requestKey);
+    const promise = new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = cacheBustedLocalSrc(src);
+      script.onload = () => {
+        script.remove();
+        if (contentStore[key]) resolve(contentStore[key]);
+        else reject(new Error(`Content did not register for ${key}.`));
+      };
+      script.onerror = () => {
+        script.remove();
+        reject(new Error(`Could not load ${src}.`));
+      };
+      document.head.append(script);
+    }).finally(() => contentLoadPromises.delete(requestKey));
+    contentLoadPromises.set(requestKey, promise);
+    return promise;
+  }
+
+  const hasBlocks = data => Boolean(
+    data && data.content && Array.isArray(data.content.blocks) && data.content.blocks.length
+  );
+
+  async function findVisibleTarget(target, direction = 1) {
+    const pages = allPages();
+    const start = pages.findIndex(page => pageKey(page) === pageKey(target));
+    if (start < 0) return target;
+    for (let position = start; position >= 0 && position < pages.length; position += direction) {
+      const candidate = pages[position];
+      const data = await loadTargetContent(candidate);
+      if (hasBlocks(data)) return candidate;
+    }
+    return null;
+  }
+
+  function targetHash(target) {
+    if (!target || target.kind === "app" || !target.subject) return "#/";
+    if (target.kind === "subject" || !target.category) return `#/${target.subject.id}`;
+    const categoryPath = `#/${target.subject.id}/${target.category.id}`;
+    if (target.kind === "category" || !target.section) return categoryPath;
+    const sectionPath = `${categoryPath}/${target.section.id}`;
+    return target.slide && target.slide.id ? `${sectionPath}/${target.slide.id}` : sectionPath;
+  }
 
   function pageKey(target) {
     if (!target || target.kind === "app" || !target.subject) return "app";
@@ -1095,20 +1164,20 @@
     }
   }
 
-  function navigate(target) {
-    if (!target.subject) {
-      location.hash = "#/";
-    } else if (!target.category) {
-      location.hash = `#/${target.subject.id}`;
-    } else if (!target.section) {
-      location.hash = `#/${target.subject.id}/${target.category.id}`;
-    } else {
-      const sectionPath = `#/${target.subject.id}/${target.category.id}/${target.section.id}`;
-      location.hash = target.slide.id ? `${sectionPath}/${target.slide.id}` : sectionPath;
+  async function navigate(target, direction = 1) {
+    const version = ++routeResolutionVersion;
+    try {
+      const destination = isEditorUiActive() ? target : await findVisibleTarget(target, direction);
+      if (version !== routeResolutionVersion) return;
+      if (destination) location.hash = targetHash(destination);
+    } catch (error) {
+      console.warn("The destination Slide could not be checked for content.", error);
+      if (version === routeResolutionVersion) location.hash = targetHash(target);
     }
   }
 
-  function resolveRoute() {
+  async function resolveRoute() {
+    const version = ++routeResolutionVersion;
     flushPendingNote();
     if (editorModeActive || presenterModeActive) setNotepadOpen(false);
     elements.editor.hidden = !isEditorUiActive();
@@ -1124,7 +1193,9 @@
     }
     if (!parts.length) {
       setActiveRoute(null, null, null);
-      renderOverview("app-overview", `${CONTENT_ROOT}/app-overview.js`, CONTENT_ROOT, { kind: "app" });
+      const target = { kind: "app" };
+      if (!await renderVisibleTargetOrAdvance(target, version)) return;
+      renderOverview("app-overview", `${CONTENT_ROOT}/app-overview.js`, CONTENT_ROOT, target);
       return;
     }
 
@@ -1136,8 +1207,10 @@
     }
     if (parts.length === 1) {
       setActiveRoute(subject.id, null, null);
+      const target = { kind: "subject", subject };
+      if (!await renderVisibleTargetOrAdvance(target, version)) return;
       renderOverview(subject.id, `${CONTENT_ROOT}/${subject.id}/subject.js`, `${CONTENT_ROOT}/${subject.id}`,
-        { kind: "subject", subject });
+        target);
       return;
     }
 
@@ -1150,8 +1223,10 @@
     if (parts.length === 2) {
       const key = `${subject.id}/${category.id}`;
       setActiveRoute(subject.id, category.id, null);
+      const target = { kind: "category", subject, category };
+      if (!await renderVisibleTargetOrAdvance(target, version)) return;
       renderOverview(key, `${CONTENT_ROOT}/${key}/category.js`, `${CONTENT_ROOT}/${key}`,
-        { kind: "category", subject, category });
+        target);
       return;
     }
 
@@ -1163,7 +1238,9 @@
     }
     if (parts.length === 3) {
       setActiveRoute(subject.id, category.id, section.id);
-      renderSlide({ subject, category, section, slide: sectionOverviewSlide(section) });
+      const target = { kind: "section", subject, category, section, slide: sectionOverviewSlide(section) };
+      if (!await renderVisibleTargetOrAdvance(target, version)) return;
+      renderSlide(target);
       return;
     }
 
@@ -1174,7 +1251,30 @@
       return;
     }
     setActiveRoute(subject.id, category.id, section.id);
-    renderSlide({ subject, category, section, slide });
+    const target = { kind: "slide", subject, category, section, slide };
+    if (!await renderVisibleTargetOrAdvance(target, version)) return;
+    renderSlide(target);
+  }
+
+  async function renderVisibleTargetOrAdvance(target, version) {
+    if (isEditorUiActive()) return version === routeResolutionVersion;
+    try {
+      const visible = await findVisibleTarget(target);
+      if (version !== routeResolutionVersion) return false;
+      if (!visible) {
+        renderNoContent();
+        return false;
+      }
+      if (pageKey(visible) !== pageKey(target)) {
+        history.replaceState(null, "", targetHash(visible));
+        resolveRoute();
+        return false;
+      }
+      return true;
+    } catch (error) {
+      console.warn("The requested Slide could not be checked for content.", error);
+      return version === routeResolutionVersion;
+    }
   }
 
   // Syncs the header Subject menu and the sidebar's highlighted Category/Section with the route
@@ -1350,6 +1450,22 @@
 
   function renderError() {
     renderOverview("routing-error", `${CONTENT_ROOT}/routing-error.js`, CONTENT_ROOT);
+  }
+
+  function renderNoContent() {
+    if (window.umedWidgetHost) window.umedWidgetHost.destroyAll();
+    clearDataFileSubscriptions();
+    currentDraw = null;
+    currentInfo = null;
+    slidePromptContent = null;
+    setChromeVisible(false);
+    updateHeaderNavigation(null);
+    elements.slide.replaceChildren();
+    const heading = document.createElement("h1");
+    heading.textContent = "No content is available";
+    const message = document.createElement("p");
+    message.textContent = "This app does not currently contain a Slide with any Blocks.";
+    elements.slide.append(heading, message);
   }
 
   function renderTrustedSources(blocks, parent, sectionKey) {
@@ -1551,8 +1667,8 @@
   function setNavigationButtons(previousButton, nextButton, pages, position) {
     previousButton.disabled = position <= 0;
     nextButton.disabled = position < 0 || position >= pages.length - 1;
-    previousButton.onclick = () => position > 0 && navigate(pages[position - 1]);
-    nextButton.onclick = () => position < pages.length - 1 && navigate(pages[position + 1]);
+    previousButton.onclick = () => position > 0 && navigate(pages[position - 1], -1);
+    nextButton.onclick = () => position < pages.length - 1 && navigate(pages[position + 1], 1);
   }
 
   function updateHeaderNavigation(target) {
@@ -1578,7 +1694,7 @@
       button.innerHTML = direction === "previous"
         ? '<svg class="slide-step-icon" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M16 10H4m5-5-5 5 5 5" /></svg>'
         : '<svg class="slide-step-icon" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M4 10h12m-5-5 5 5-5 5" /></svg>';
-      button.addEventListener("click", () => destination && navigate(destination));
+      button.addEventListener("click", () => destination && navigate(destination, direction === "previous" ? -1 : 1));
       return button;
     };
 

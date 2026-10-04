@@ -339,7 +339,7 @@ body.presenter-mode .slide-content .gpt-followups h2 { font-size: 1.1em; }
   color: #212529;
 }
 #level-navigation .chatbot-button svg, #level-navigation .notepad-button svg { display: block; }
-#level-navigation .notepad-button[aria-pressed="true"] { color: #fff; background: #005a9c; border-color: #005a9c; }
+#level-navigation .notepad-button[aria-pressed="true"] { color: #fff; background: #2f855a; border-color: #2f855a; }
 #content-toolbar button:disabled {
   color: #6c757d;
   background: #eef0f2;
@@ -574,6 +574,7 @@ body.presenter-mode .slide-content .gpt-followups h2 { font-size: 1.1em; }
   border-radius: 50%;
   font-size: 1.45rem;
   line-height: 1;
+  margin-top: -0.4rem;
 }
 .learner-notepad-close:hover, .learner-notepad-close:focus-visible { color: #212529; background: #eef1f3; }
 .learner-notepad textarea {

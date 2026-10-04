@@ -102,7 +102,7 @@ Educational content is structured in hierarchical levels:
   - A Category has one or more Sections.
   - A Section has one to three Levels, as needed.
   - A Level has zero or more Slides.
-  - A Slide has a title and one or more Blocks.
+- A Slide has a title and zero or more Blocks.
 - A nested Subject, Category, Section, and Slide define the hierachical path to  
   one content unit in the App and its associated files. In contrast, Level is a 
   Slide attribute helps organize Slide navigation within a Section, and all 
@@ -180,6 +180,11 @@ Parent `app.css`, and the Parent `app.js` before any Framework script.
     hash `#/` is read from `/src/content/app-overview.js`. This landing Slide also 
     lists links to all Subjects.
 - An invalid route displays the error Slide in `/src/content/routing-error.js`.
+- In Learner and Presenter Modes, a Slide whose `content.blocks` array is empty is
+  skipped rather than rendered. Routing advances through the reading order until
+  it finds a Slide with at least one Block; Previous navigation searches backward.
+  Empty landing and content Slides remain present and directly accessible in
+  Editor Mode so Editors can restore their content or manage their hierarchy.
 
 # Searching
 - Keywords are individual deduplicated lower-cased words extracted from content  
