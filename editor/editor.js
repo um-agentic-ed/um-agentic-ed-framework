@@ -1371,7 +1371,10 @@
         : path.length === 2 ? findCategoryEntry(path[0], path[1])
         : path.length === 3 ? findSectionEntry(path[0], path[1], path[2])
         : null;
-      if (entry) entry.title = data.title;
+      if (entry) {
+        entry.uuid = data.uuid;
+        entry.title = data.title;
+      }
       return;
     }
     if (kind !== "slide" || path.length !== 4) return;
@@ -1468,9 +1471,9 @@
     await writeIndexFile(rootHandle);
   }
 
-  // Subject/Category/Section order, id, and title live only in content-index.js (their own
-  // subject.js/category.js/section.js landing files just hold title/content), so reordering them
-  // from the sidebar only needs to rewrite that one file.
+  // Subject/Category/Section order and ids live only in content-index.js; their UUIDs and titles
+  // are mirrored in their landing files. Reordering hierarchy entries still only rewrites the
+  // index because neither stable identity nor learner-facing content changes.
   async function persistIndex() {
     if (!window.umedEditorFS) return;
     const rootHandle = await window.umedEditorFS.getContentRootHandle();

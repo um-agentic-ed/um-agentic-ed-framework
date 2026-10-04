@@ -352,10 +352,13 @@ Content files:
   `window.umedAppContent['<subject>']`, `window.umedAppContent['<subject>/<category>']`
   and `window.umedAppContent['<subject>/<category>/<section>']`. The App landing and
   error Slides use the keys `app-overview` and `routing-error`.
+- App, Subject, Category, and Section landing Slides have immutable UUIDs so Learner
+  notes remain associated with them when hierarchy routes change. The routing-error
+  Slide is not a note-taking target and does not require a UUID.
 
 ## Slide fields
 
-Every Slide has the following top-level fields:
+Every content Slide has the following top-level fields:
 - `id`, a kebab-case unique identifier, unique within its `<subject>/<category>/<section>`
 - `uuid`, an immutable canonical UUID v4 that uniquely identifies the Slide
   independently of its route. It is generated once when the Slide is created,
@@ -376,6 +379,11 @@ Every Slide has the following top-level fields:
   timestamp; Editor Mode must set it whenever it saves a learner-facing Slide
   content or title change.
 - `content`, a `blocks` array (see Slide content blocks below)
+
+App, Subject, Category, and Section landing Slides use `schemaVersion: 2` and have
+the shared `uuid`, `title`, and `content` fields above. Their hierarchy supplies their
+route identity, so they do not carry content-Slide-only `id`, `level`, `order`, or
+`contentUpdatedAt` fields.
 
 ## Slide content blocks
 
@@ -481,20 +489,24 @@ search content without loading every `slide.js` file, preserving load efficiency
 
 ```js
 window.umedAppContentIndex = {
-  schemaVersion: 2,
+  schemaVersion: 3,
+  appOverviewUuid: 'f784d68c-b840-4890-a45d-7f7e663c9f4f',
   subjects: [
     {
       id: 'basic-genetics',
+      uuid: '6c42c84d-c709-4ea3-af27-9b8677b88165',
       title: 'Basic Genetics',
       order: 10,
       categories: [
         {
           id: 'dna-and-rna',
+          uuid: 'e7799075-d307-4281-9e7a-69ba371760a7',
           title: 'DNA and RNA',
           order: 10,
           sections: [
             {
               id: 'dna-structure',
+              uuid: 'a6f4ff83-0354-4ea8-8812-1f595b62aad6',
               title: 'DNA Structure',
               order: 10,
               slides: [
@@ -517,6 +529,10 @@ window.umedAppContentIndex = {
 };
 ```
 
+- `appOverviewUuid` is the immutable UUID stored in `app-overview.js`.
+- `subjects[].uuid`, `categories[].uuid`, and `sections[].uuid` mirror the immutable
+  UUID in the corresponding landing Slide file. These identities are preserved when
+  hierarchy entries are renamed, reordered, or moved.
 - `subjects[].order`, `categories[].order` and `sections[].order` determine display order
   and default "first Section"/"first Slide" navigation targets, using the
   same spaced-increment convention as Slide `order`.
@@ -539,8 +555,9 @@ window.umedAppContentIndex = {
   produce one.
 - App identity (`appUuid`, `appName`) is not stored in the index; it is declared 
   in the Parent root `app.js` (see [App identity and branding](#app-identity-and-branding)).
-- `slides[].uuid` is the same immutable UUID stored in the corresponding
-  `slide.js`; it provides stable Slide identity when routes change.
+- Every hierarchy and content-Slide UUID in the index is the same immutable UUID
+  stored in its corresponding content file and provides stable Slide identity when
+  routes change.
 
 ## Behavior
 - On app load, the index is fetched immediately (before any Slide content),
@@ -559,7 +576,7 @@ window.umedAppContentIndex = {
 ## Maintaining the index
 - The index must stay synchronized with the actual Slide files on disk.
 - Every Slide UUID must be a canonical UUID v4, unique across the entire app,
-  present in both `slide.js` and its index entry, and identical in both places.
+  present in its content file and index entry, and identical in both places.
   Indexing and content-update operations must never regenerate an existing UUID.
 - When an Agent creates, edits, or removes a Slide file, it must make the
   corresponding addition, update, or removal in `content-index.js` with the
@@ -580,10 +597,11 @@ window.umedAppContentIndex = {
 # Learner note taking
 
 To facilitate active learning a textarea notepad can be opened in Learner mode 
-where users can record notes about Slides. The notepad is not offered on App, 
-Subject, Category, or Section landing Slides. Notes are cached in memory for immediate 
-interaction and saved automatically to IndexedDB using the immutable App and Slide 
-UUIDs, so they persist across browser sessions without modifying content files. 
+where users can record notes about content Slides and App, Subject, Category, and
+Section landing Slides. Once opened, the notepad remains open as the Learner navigates
+among these Slides until explicitly closed. Notes are cached in memory for immediate
+interaction and saved automatically to IndexedDB using the immutable App and Slide
+UUIDs, so they persist across browser sessions without modifying content files.
 Learners may export an unencrypted `<appName>.notes.json` archival/shareable copy. 
 A valid same-App notes file can either atomically replace the Learner's saved 
 notes or be viewed temporarily as read-only shared notes without altering their own.

@@ -105,8 +105,7 @@ button { cursor: pointer; }
   color: var(--umed-brand-text);
   font-weight: 600;
   background: transparent;
-  border: 1px solid var(--umed-brand-border);
-  border-radius: 4px;
+  border: none;
 }
 .subject-menu-button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .subject-menu-button:hover, .subject-menu-button[aria-expanded="true"] { background: var(--umed-brand-hover-bg); }
@@ -140,7 +139,7 @@ button { cursor: pointer; }
 .subject-menu-chunk--drag { opacity: .85; }
 .subject-menu-spacer { position: relative; height: .6rem; margin: .2rem 0; }
 .subject-menu-spacer:only-child { height: 1.6rem; }
-.sidebar-hint { margin: 0; padding: .5rem 1rem; font-size: .9rem; }
+.sidebar-hint { margin: 0; padding: .5rem 1rem; font-size: .9rem; color: #aaa;}
 .header-actions { position: relative; display: flex; align-items: center; justify-content: flex-end; gap: .65rem; width: min(42vw, 430px); }
 .normal-header-navigation { display: flex; align-items: center; gap: .65rem; flex: 1 1 auto; min-width: 0; }
 .normal-header-navigation[hidden] { display: none; }

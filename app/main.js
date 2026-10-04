@@ -141,7 +141,7 @@
   let presenterModeActive = false;
   let presenterFontPercent = 100;
   let notepadOpen = false;
-  let activeNotepadKey = "app-overview";
+  let activeNotepadKey = null;
   let notepadButton = null;
   const slideNotes = new Map();
   const NOTE_SAVE_DELAY_MS = 600;
@@ -213,7 +213,17 @@
     if (!window.crypto || typeof window.crypto.randomUUID !== "function") {
       throw new Error("UUID generation is unavailable in this browser.");
     }
-    const existingUuids = new Set(allContentSlides().map(target => target.slide.uuid).filter(Boolean));
+    const existingUuids = new Set([
+      index.appOverviewUuid,
+      ...index.subjects.flatMap(subject => [
+        subject.uuid,
+        ...subject.categories.flatMap(category => [
+          category.uuid,
+          ...category.sections.flatMap(section => [section.uuid, ...section.slides.map(slide => slide.uuid)])
+        ])
+      ]),
+      ...Object.values(contentStore).map(data => data && data.uuid)
+    ].filter(Boolean));
     for (let attempt = 0; attempt < 10; attempt += 1) {
       const uuid = window.crypto.randomUUID();
       if (!existingUuids.has(uuid)) return uuid;
@@ -265,6 +275,10 @@
     const editVersion = noteEditVersion;
     activeNotepadKey = slideUuid;
     updateNotepadViewMode();
+    if (!slideUuid) {
+      elements.notepadText.value = "";
+      return;
+    }
     if (viewingSharedNotes) {
       elements.notepadText.value = sharedNotes && sharedNotes.has(slideUuid) ? sharedNotes.get(slideUuid) : "";
       return;
@@ -288,10 +302,31 @@
   }
 
   function noteMetadataByUuid() {
-    return new Map(allContentSlides().map(target => [target.slide.uuid, {
-      slideTitle: target.slide.title,
-      routeAtExport: `${target.subject.id}/${target.category.id}/${target.section.id}/${target.slide.id}`
-    }]));
+    const metadata = new Map();
+    if (index.appOverviewUuid) {
+      metadata.set(index.appOverviewUuid, {
+        slideTitle: (contentStore["app-overview"] && contentStore["app-overview"].title) || identity.appTitle || "App overview",
+        routeAtExport: "/"
+      });
+    }
+    for (const subject of sorted(index.subjects)) {
+      if (subject.uuid) metadata.set(subject.uuid, { slideTitle: subject.title, routeAtExport: subject.id });
+      for (const category of sorted(subject.categories)) {
+        const categoryRoute = `${subject.id}/${category.id}`;
+        if (category.uuid) metadata.set(category.uuid, { slideTitle: category.title, routeAtExport: categoryRoute });
+        for (const section of sorted(category.sections)) {
+          const sectionRoute = `${categoryRoute}/${section.id}`;
+          if (section.uuid) metadata.set(section.uuid, { slideTitle: section.title, routeAtExport: sectionRoute });
+          for (const slide of sorted(section.slides)) {
+            if (slide.uuid) metadata.set(slide.uuid, {
+              slideTitle: slide.title,
+              routeAtExport: `${sectionRoute}/${slide.id}`
+            });
+          }
+        }
+      }
+    }
+    return metadata;
   }
 
   function notesFileName() {
@@ -397,7 +432,7 @@
   async function loadNotesFile(file) {
     if (file.size > MAX_NOTES_FILE_BYTES) throw new Error("The selected notes file is larger than the 10 MB limit.");
     const notes = validateNotesFile(JSON.parse(await file.text()));
-    const currentSlideUuids = new Set(allContentSlides().map(target => target.slide.uuid));
+    const currentSlideUuids = new Set(noteMetadataByUuid().keys());
     const matchingCount = notes.filter(note => currentSlideUuids.has(note.slideUuid)).length;
     const unavailableCount = notes.length - matchingCount;
     const availabilityMessage = unavailableCount
@@ -441,10 +476,15 @@
     flushPendingNote();
     currentInfo = { key, kind, assetBasePath, src };
     const data = contentStore[key];
-    if (kind === "slide" && data && data.uuid) loadNote(data.uuid);
-    else {
+    if (data && data.uuid && activeNotepadKey !== data.uuid) {
+      try {
+        loadNote(data.uuid);
+      } catch (error) {
+        console.warn("Learner note could not be activated for this Slide.", error);
+      }
+    } else if (!data || !data.uuid) {
       noteLoadVersion += 1;
-      activeNotepadKey = key;
+      activeNotepadKey = null;
       elements.notepadText.value = "";
     }
     window.dispatchEvent(new CustomEvent("umed:slide-loaded", { detail: currentInfo }));
@@ -467,9 +507,9 @@
 
   const activeSubject = () => index.subjects.find(item => item.id === activeSubjectId) || null;
 
-  // The Section overview is identified by a null Slide id so it can participate in the same
-  // ordered, book-like navigation sequence as app, Subject, Category, and authored Slide pages.
-  const sectionOverviewSlide = (section) => ({ id: null, title: section.title, level: null, order: 0 });
+  // The Section overview is identified by a null Slide id but carries the Section landing Slide's
+  // UUID, so it participates in both book-like navigation and stable Learner note storage.
+  const sectionOverviewSlide = (section) => ({ id: null, uuid: section.uuid, title: section.title, level: null, order: 0 });
 
   // Builds the complete reading order fresh from persisted order fields so Subject, Category,
   // Section, and Slide additions or reordering are reflected immediately in Previous/Next
@@ -602,7 +642,7 @@
     if (!subject) {
       const hint = document.createElement("p");
       hint.className = "sidebar-hint";
-      hint.textContent = "Choose a Subject from the menu in the header to see its Categories.";
+      hint.textContent = "Choose a Subject in the header menu.";
       elements.sidebar.append(hint);
       return;
     }
@@ -888,7 +928,14 @@
       : null;
     if (!title) return;
     const id = uniqueId(title, category.sections.map(item => item.id));
-    const newSection = { id, title, order: 0, slides: [] };
+    let uuid;
+    try {
+      uuid = createUuid();
+    } catch (error) {
+      alert(error.message);
+      return;
+    }
+    const newSection = { id, uuid, title, order: 0, slides: [] };
 
     category.sections.push(newSection);
     const siblings = sorted(category.sections.filter(item => item.id !== id));
@@ -903,7 +950,7 @@
     expandedCategoryId = category.id;
     renderSidebar();
 
-    const initialData = { schemaVersion: 1, title, content: { blocks: [{ type: "text", markdown: "" }] } };
+    const initialData = { uuid, schemaVersion: 2, title, content: { blocks: [{ type: "text", markdown: "" }] } };
     if (window.umedEditor && typeof window.umedEditor.createSection === "function") {
       try {
         await window.umedEditor.createSection(subject.id, category.id, id, initialData);
@@ -923,7 +970,14 @@
       : null;
     if (!title) return;
     const id = uniqueId(title, subject.categories.map(item => item.id));
-    const newCategory = { id, title, order: 0, sections: [] };
+    let uuid;
+    try {
+      uuid = createUuid();
+    } catch (error) {
+      alert(error.message);
+      return;
+    }
+    const newCategory = { id, uuid, title, order: 0, sections: [] };
 
     subject.categories.push(newCategory);
     const siblings = sorted(subject.categories.filter(item => item.id !== id));
@@ -938,7 +992,7 @@
     expandedCategoryId = id;
     renderSidebar();
 
-    const initialData = { schemaVersion: 1, title, content: { blocks: [{ type: "text", markdown: "" }] } };
+    const initialData = { uuid, schemaVersion: 2, title, content: { blocks: [{ type: "text", markdown: "" }] } };
     if (window.umedEditor && typeof window.umedEditor.createCategory === "function") {
       try {
         await window.umedEditor.createCategory(subject.id, id, initialData);
@@ -1145,7 +1199,14 @@
       : null;
     if (!title) return;
     const id = uniqueId(title, [...index.subjects.map(item => item.id), ...RESERVED_SUBJECT_IDS]);
-    const newSubject = { id, title, order: 0, categories: [] };
+    let uuid;
+    try {
+      uuid = createUuid();
+    } catch (error) {
+      alert(error.message);
+      return;
+    }
+    const newSubject = { id, uuid, title, order: 0, categories: [] };
 
     index.subjects.push(newSubject);
     const siblings = sorted(index.subjects.filter(item => item.id !== id));
@@ -1158,7 +1219,7 @@
     }
     renderSubjectMenu();
 
-    const initialData = { schemaVersion: 1, title, content: { blocks: [{ type: "text", markdown: "" }] } };
+    const initialData = { uuid, schemaVersion: 2, title, content: { blocks: [{ type: "text", markdown: "" }] } };
     if (window.umedEditor && typeof window.umedEditor.createSubject === "function") {
       try {
         await window.umedEditor.createSubject(id, initialData);
@@ -1237,19 +1298,23 @@
 
   function setChromeVisible(visible) {
     elements.toolbar.hidden = !visible || presenterModeActive;
-    if (!visible) {
-      setSlideMenuExpanded(false);
-      setNotepadOpen(false);
-    }
+    elements.menu.hidden = !visible || toolbarMenuToggle.getAttribute("aria-expanded") !== "true";
+    if (!visible) setNotepadOpen(false);
   }
 
-  // Renders a top-level overview or error Slide. Subject and Category overviews keep the toolbar
-  // visible for stable page layout, while controls that require a Section or authored Slide
-  // remain disabled.
+  // Renders a top-level overview or error Slide. Valid App, Subject, and Category overviews keep
+  // the toolbar visible for stable page layout. Their Section-specific controls remain disabled,
+  // while an already-open Slides menu remains present in its empty, Level-only state.
   function renderOverview(key, src, assetBasePath, navigationTarget = null) {
-    const showToolbar = navigationTarget && (navigationTarget.kind === "category" || navigationTarget.kind === "subject");
+    const showToolbar = Boolean(navigationTarget);
     setChromeVisible(showToolbar);
-    if (showToolbar) renderLevels(navigationTarget);
+    if (showToolbar) {
+      renderLevels(navigationTarget);
+      renderMenu(navigationTarget);
+    } else {
+      destroySlideMenuSortables();
+      elements.menu.replaceChildren();
+    }
     updateHeaderNavigation(navigationTarget);
     const draw = () => {
       if (window.umedWidgetHost) window.umedWidgetHost.destroyAll();
@@ -1288,7 +1353,6 @@
   function renderSlide(target) {
     const { subject, category, section, slide } = target;
     const isOverview = !slide.id;
-    if (isOverview) setNotepadOpen(false);
     setChromeVisible(true);
     renderLevels(target);
     renderMenu(target);
@@ -1345,8 +1409,7 @@
     const slide = target.slide || null;
     const isContentSlide = Boolean(section && slide && slide.id);
     elements.levels.replaceChildren();
-    toolbarMenuToggle.disabled = !section;
-    if (!section) setSlideMenuExpanded(false);
+    toolbarMenuToggle.disabled = false;
 
     LEVELS.forEach(level => {
       const button = document.createElement("button");
@@ -1366,7 +1429,7 @@
       const notesButton = document.createElement("button");
       notesButton.type = "button";
       notesButton.className = "notepad-button";
-      notesButton.disabled = !isContentSlide;
+      notesButton.disabled = false;
       notesButton.setAttribute("aria-label", notepadOpen ? "Hide slide notes" : "Show slide notes");
       notesButton.setAttribute("aria-pressed", String(notepadOpen));
       notesButton.title = notepadOpen ? "Hide slide notes" : "Show slide notes";
@@ -1540,15 +1603,16 @@
   function renderMenu(target) {
     destroySlideMenuSortables();
     elements.menu.replaceChildren();
+    const section = target.section || null;
     for (const level of LEVELS) {
-      const slidesInLevel = sorted(target.section.slides.filter(item => item.level === level));
-      if (!slidesInLevel.length && !isEditorUiActive()) continue;
+      const slidesInLevel = section ? sorted(section.slides.filter(item => item.level === level)) : [];
+      if (section && !slidesInLevel.length && !isEditorUiActive()) continue;
 
       const heading = document.createElement("div");
       heading.className = "slide-menu-level" + (slidesInLevel.length ? "" : " slide-menu-level--empty");
       heading.textContent = LEVEL_TITLES[level];
       elements.menu.append(heading);
-      if (isEditorUiActive()) elements.menu.append(createSlideSpacer(target, level, 0));
+      if (section && isEditorUiActive()) elements.menu.append(createSlideSpacer(target, level, 0));
 
       const list = document.createElement("div");
       list.className = "slide-menu-list";
@@ -1573,7 +1637,7 @@
         list.append(chunk);
       });
 
-      if (isEditorUiActive()) attachSlideMenuSortable(list, target);
+      if (section && isEditorUiActive()) attachSlideMenuSortable(list, target);
     }
   }
 
@@ -2275,7 +2339,7 @@
     searchTimer = setTimeout(() => search(query), SEARCH_DEBOUNCE_MS);
   });
   elements.notepadText.addEventListener("input", event => {
-    if (viewingSharedNotes) return;
+    if (!activeNotepadKey || viewingSharedNotes) return;
     slideNotes.set(activeNotepadKey, event.currentTarget.value);
     noteEditVersion += 1;
     queueNoteSave(activeNotepadKey);
