@@ -126,6 +126,26 @@
     return;
   }
 
+  // Existing Apps that predate this setting continue to use visible Subjects. A suppressed App
+  // retains one structural Subject so content keys and routes never need a second schema.
+  const subjectsEnabled = identity.subjectsEnabled !== false;
+  const defaultSubjectId = `${identity.appName || ""}-subject`;
+  const defaultSubject = !subjectsEnabled && index.subjects.length === 1
+    ? index.subjects[0]
+    : null;
+  if (!subjectsEnabled && (
+    !identity.appName ||
+    !defaultSubject ||
+    defaultSubject.id !== defaultSubjectId ||
+    defaultSubject.title !== defaultSubjectId
+  )) {
+    elements.education.hidden = false;
+    elements.toolbar.hidden = true;
+    elements.menu.hidden = true;
+    elements.slide.textContent = `Subject suppression requires exactly one Subject whose id and title are "${defaultSubjectId}".`;
+    return;
+  }
+
   const subjectMenu = {
     wrapper: document.getElementById("subject-menu"),
     button: document.getElementById("subject-menu-button"),
@@ -206,7 +226,7 @@
   // can mark the matching Category button/Section link with aria-current for persistent
   // highlighting. The sidebar always lists the Categories of the active Subject; the active
   // Subject is sticky, so it is kept on the App landing and error routes once one was chosen.
-  let activeSubjectId = null;
+  let activeSubjectId = defaultSubject ? defaultSubject.id : null;
   let activeCategoryId = null;
   let activeSectionId = null;
 
@@ -598,7 +618,7 @@
 
   const sorted = (items) => items.slice().sort((a, b) => a.order - b.order);
 
-  const activeSubject = () => index.subjects.find(item => item.id === activeSubjectId) || null;
+  const activeSubject = () => defaultSubject || index.subjects.find(item => item.id === activeSubjectId) || null;
 
   // The Section overview is identified by a null Slide id but carries the Section landing Slide's
   // UUID, so it participates in both book-like navigation and stable Learner note storage.
@@ -610,7 +630,7 @@
   const allPages = () => [
     { kind: "app" },
     ...sorted(index.subjects).flatMap(subject => [
-      { kind: "subject", subject },
+      ...(subjectsEnabled ? [{ kind: "subject", subject }] : []),
       ...sorted(subject.categories).flatMap(category => [
         { kind: "category", subject, category },
         ...sorted(category.sections).flatMap(section => [
@@ -1207,6 +1227,16 @@
     }
     if (parts.length === 1) {
       setActiveRoute(subject.id, null, null);
+      if (!subjectsEnabled) {
+        const destination = allPages().find(page => page.kind !== "app");
+        if (!destination) {
+          renderNoContent();
+          return;
+        }
+        history.replaceState(null, "", targetHash(destination));
+        resolveRoute();
+        return;
+      }
       const target = { kind: "subject", subject };
       if (!await renderVisibleTargetOrAdvance(target, version)) return;
       renderOverview(subject.id, `${CONTENT_ROOT}/${subject.id}/subject.js`, `${CONTENT_ROOT}/${subject.id}`,
@@ -1308,7 +1338,12 @@
       subjectMenuSortable.destroy();
       subjectMenuSortable = null;
     }
-    subjectMenu.wrapper.hidden = !subjects.length && !editing;
+    subjectMenu.wrapper.hidden = !subjectsEnabled || (!subjects.length && !editing);
+    if (!subjectsEnabled) {
+      subjectMenu.popup.replaceChildren();
+      setSubjectMenuOpen(false);
+      return;
+    }
     subjectMenu.label.textContent = current ? current.title : "Subjects";
     subjectMenu.popup.replaceChildren();
 
@@ -1429,6 +1464,7 @@
 
   // The App landing Slide introduces the Subjects, each linking to its own landing Slide.
   function renderSubjectList(parent) {
+    if (!subjectsEnabled) return;
     const subjects = sorted(index.subjects);
     if (!subjects.length) return;
     const wrapper = document.createElement("div");
@@ -2338,7 +2374,7 @@
       sectionEntry.slides.push(slide);
     }
     return subjects.map(subjectEntry => {
-      if (subjectEntry.categories.length >= 3) {
+      if (subjectsEnabled && subjectEntry.categories.length >= 3) {
         return { subject: subjectEntry.subject, categories: [] };
       }
       return {
@@ -2374,7 +2410,7 @@
       elements.results.append(link);
     };
     for (const { subject, categories } of buildSearchResultsTree(matches)) {
-      addLink("search-results-subject", `#/${subject.id}`, subject.title);
+      if (subjectsEnabled) addLink("search-results-subject", `#/${subject.id}`, subject.title);
 
       for (const { category, sections } of categories) {
         addLink("search-results-category", `#/${subject.id}/${category.id}`, category.title);

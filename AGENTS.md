@@ -1,8 +1,9 @@
 # Project overview
 
-`um-agentic-ed` is a system for building education web apps. This repository, `um-agentic-ed-framework`, is the Framework Submodule that is reused across 
-many Apps. It is wrapped by all App Parents, which themselves are always cloned  
-from the `um-agentic-ed-parent` repository.
+`um-agentic-ed` is a system for building education web apps. This repository, 
+`um-agentic-ed-framework`, is the Framework Submodule that is reused across 
+many Apps. It is wrapped by all App Parents, which themselves are always started
+as descendent copies of the `um-agentic-ed-parent` repository.
 
 # Coding agent instruction sources
 
@@ -81,7 +82,9 @@ data structure for all content.
 Educational content is structured in hierarchical levels:
 - An *App* is focused on one broad educational context or disipline, e.g., a 
   college course.
-- A *Subject* defines one focus area in the context of the App.
+- A *Subject* defines one focus area in the context of the App; Subjects are 
+  always part of the tree but can be optionally be suppressed to a single 
+  default Subject that is hidden in the UI. 
 - A *Category* groups major content objectives within a Subject.
 - A *Section* groups educational topics within a Category.
 - A *Level* orders content by difficulty. 
@@ -97,12 +100,13 @@ Educational content is structured in hierarchical levels:
 - A *Block* is one portion of a Slide's contents to support different UI elements.
   - Slide may have zero, one, or mutliple instances of any Block type.
 - Thus:
-  - An App has one or more Subjects.
+  - An App has one or more Subjects (even when Subject usage is suppressed).
   - A Subject has one or more Categories.
   - A Category has one or more Sections.
   - A Section has one to three Levels, as needed.
   - A Level has zero or more Slides.
-- A Slide has a title and zero or more Blocks.
+- A Slide has a title and zero or more Blocks (Slide with no blocks are 
+  suppressed in the UI).
 - A nested Subject, Category, Section, and Slide define the hierachical path to  
   one content unit in the App and its associated files. In contrast, Level is a 
   Slide attribute helps organize Slide navigation within a Section, and all 
@@ -117,10 +121,14 @@ The page layout and styles are mature and will not change frequently and not
 unless you are requested to change them. Use the existing codebase as your guide. 
 
 Hierarchical levels are reflected in the app:
-- Subjects are shown on the App landing Slide and switched via a popup menu in the 
-  header, to the right of the app title. In Editor Mode that menu works like the 
-  Slides menu: hover "+" buttons between and around Subjects add a new Subject, 
-  and dragging reorders them. 
+- When `subjectsEnabled` is true, Subjects are shown on the App landing Slide and
+  switched via a popup menu in the header, to the right of the app title. In
+  Editor Mode that menu works like the Slides menu: hover "+" buttons between and
+  around Subjects add a new Subject, and dragging reorders them.
+- When `subjectsEnabled` is false, the Subject level remains in content storage,
+  content keys, and URL paths but is hidden everywhere in the UI. The App has
+  exactly one structural Subject whose id and title are both
+  `<appName>-subject`; its landing Slide has an empty `content.blocks` array.
 - The sidebar has:
     - A top-level entry for each Category in a Subject. Category Section 
       visibility is exclusive; inactive Categories are collapsed.
@@ -147,6 +155,10 @@ once when creating an App, by hand or with the `set-app-identity` skill:
     not `appName`, is authoritative when validating an imported notes file.
   - `appTitle`: human-readable title, shown in both the app header and the 
     browser tab. The HTML entrypoint carries no title of its own.
+  - `subjectsEnabled`: boolean indicating whether the Subject level is visible
+    and editable in the App UI. Omitted values behave as `true` for backward
+    compatibility. When `false`, the single structural Subject follows the
+    `<appName>-subject` invariant described above.
   - `discipline`: the subject area Learners study, used with `learnerLevel` as 
     context in prompts sent to AI chat assistants.
   - `learnerLevel`: the typical Learner the App targets, as an adjective phrase 
@@ -175,10 +187,12 @@ Parent `app.css`, and the Parent `app.js` before any Framework script.
   - The Slide for URL `#/<subject>/<category>` is read from landing slide
     `/src/content/<subject>/<category>/category.js`.
   - The Slide for URL `#/<subject>` is read from landing slide
-    `/src/content/<subject>/subject.js`.
-  - The Slide for a URL with no hashed route, an empty hash `#`, or the root  
-    hash `#/` is read from `/src/content/app-overview.js`. This landing Slide also 
-    lists links to all Subjects.
+    `/src/content/<subject>/subject.js`. In Subject-suppressed Apps this route is
+    retained for structural consistency but advances to the first Category-or-
+    deeper route, and the Subject landing Slide must be empty.
+  - The Slide for a URL with no hashed route, an empty hash `#`, or the root
+    hash `#/` is read from `/src/content/app-overview.js`. This landing Slide also
+    lists links to all Subjects when Subjects are enabled.
 - An invalid route displays the error Slide in `/src/content/routing-error.js`.
 - In Learner and Presenter Modes, a Slide whose `content.blocks` array is empty is
   skipped rather than rendered. Routing advances through the reading order until
@@ -259,9 +273,12 @@ Parent `app.css`, and the Parent `app.js` before any Framework script.
       the match tree. Finding all such matches is important to effective searching.
   - Subject, Category, Section and Slide in the search match list should occupy 
     at most one line of text, using an ellipsis overflow for long entries.
-- Because matching keywords are not themselves displayed in the match list, 
+- Because matching keywords are not themselves displayed in the match list,
   and because any single instance on a Slide is sufficient to generate a query
   match, keyword stores should be maintained as deduplicated lowercase strings.
+- When Subjects are suppressed, search-result links retain the default Subject
+  id in their URLs but the result tree begins with Categories. Subject labels
+  and Subject-only collapsed results are not shown.
 
 # File tree
 
@@ -559,7 +576,11 @@ window.umedAppContentIndex = {
   `assets`, `app-overview` and `routing-error` are reserved and must not
   be used as Subject ids; Editor Mode adds a numeric suffix if a title would
   produce one.
-- App identity (`appUuid`, `appName`) is not stored in the index; it is declared 
+- A Subject-suppressed App has exactly one Subject entry. Its `id` and `title`
+  both equal `<appName>-subject`, its matching `subject.js` landing Slide has no
+  Blocks, and all Category, Section, and Slide routes still begin with its id.
+- App identity (`appUuid`, `appName`, `subjectsEnabled`) is not stored in the
+  index; it is declared
   in the Parent root `app.js` (see [App identity and branding](#app-identity-and-branding)).
 - Every hierarchy and content-Slide UUID in the index is the same immutable UUID
   stored in its corresponding content file and provides stable Slide identity when
