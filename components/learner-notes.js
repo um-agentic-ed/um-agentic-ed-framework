@@ -2,7 +2,7 @@
   "use strict";
 
   const DATABASE_NAME = "umed-learner-notes";
-  const DATABASE_VERSION = 1;
+  const DATABASE_VERSION = 2;
   const STORE_NAME = "notes";
   let databasePromise = null;
   let warningShown = false;
@@ -64,7 +64,14 @@
         resolve(null);
         return;
       }
-      request.onsuccess = () => resolve(request.result ? request.result.text : null);
+      request.onsuccess = () => {
+        const record = request.result;
+        resolve(record ? {
+          text: typeof record.text === "string" ? record.text : "",
+          drawing: record.drawing && typeof record.drawing === "object" ? record.drawing : null,
+          updatedAt: record.updatedAt || null
+        } : null);
+      };
       request.onerror = () => {
         warn(request.error);
         resolve(null);
@@ -72,7 +79,7 @@
     });
   }
 
-  async function saveNote(appUuid, slideUuid, text) {
+  async function saveNote(appUuid, slideUuid, note) {
     const database = await openDatabase();
     if (!database) return false;
     return new Promise(resolve => {
@@ -86,15 +93,19 @@
         resolve(false);
         return;
       }
-      if (text === "") {
+      const text = note && typeof note.text === "string" ? note.text : "";
+      const drawing = note && note.drawing && typeof note.drawing === "object" ? note.drawing : null;
+      const hasDrawing = Boolean(drawing && Array.isArray(drawing.objects) && drawing.objects.length);
+      if (text === "" && !hasDrawing) {
         store.delete([appUuid, slideUuid]);
       } else {
         store.put({
           appUuid,
           slideUuid,
           text,
+          drawing: hasDrawing ? drawing : null,
           updatedAt: new Date().toISOString(),
-          schemaVersion: 1
+          schemaVersion: 2
         });
       }
       transaction.oncomplete = () => resolve(true);
@@ -158,11 +169,12 @@
         notes.forEach(note => store.put({
           appUuid,
           slideUuid: note.slideUuid,
-          text: note.text,
+          text: typeof note.text === "string" ? note.text : "",
+          drawing: note.drawing && typeof note.drawing === "object" ? note.drawing : null,
           updatedAt: note.updatedAt || new Date().toISOString(),
           slideTitle: note.slideTitle || null,
           routeAtExport: note.routeAtExport || null,
-          schemaVersion: 1
+          schemaVersion: 2
         }));
       };
       cursorRequest.onerror = () => transaction.abort();

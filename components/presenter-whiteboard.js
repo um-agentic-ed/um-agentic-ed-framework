@@ -11,18 +11,23 @@
   const deleteButton = document.getElementById("whiteboard-delete");
   const undoButton = document.getElementById("whiteboard-undo");
   const clearButton = document.getElementById("whiteboard-clear");
+  const fitButton = document.getElementById("whiteboard-fit");
   const toolButtons = Array.from(document.querySelectorAll("[data-whiteboard-tool]"));
   if (!pane || !toggle || !host || !canvasElement) return;
 
-  const documents = new Map();
+  const originalParent = pane.parentNode;
+  const originalNextSibling = pane.nextSibling;
   const MAX_HISTORY = 30;
   let canvas = null;
   let resizeObserver = null;
   let presenterModeActive = false;
+  let learnerModeActive = false;
+  let readOnly = false;
+  let fitted = false;
   let open = false;
   // This script loads the first time Presenter Mode is entered, so start from the Slide on screen.
-  const initialInfo = window.umedApp && window.umedApp.getCurrentSlideInfo();
-  let activeRoute = (initialInfo && initialInfo.key) || "app-overview";
+  let activeSlideUuid = window.umedApp && window.umedApp.getCurrentSlideUuid();
+  let activeDocument = null;
   let activeTool = "select";
   let activeBorderColor = "#111111";
   let activeFillColor = "#d9dde1";
@@ -41,11 +46,19 @@
   deleteButton.innerHTML = icons.delete || "Delete";
   undoButton.innerHTML = icons.undo || "Undo";
   clearButton.innerHTML = icons.clear || "Clear";
+  fitButton.innerHTML = icons.fit || "Fit";
 
   const serialize = () => JSON.stringify(canvas ? canvas.toJSON() : { version: "5.3.0", objects: [] });
 
   function updateActions() {
+    const editingDisabled = readOnly || fitted;
+    toolButtons.forEach(button => { button.disabled = editingDisabled || !canvas; });
+    colorPickers.forEach(picker => {
+      picker.querySelector(".whiteboard-color-toggle").disabled = editingDisabled || !canvas;
+      picker.querySelectorAll("[data-whiteboard-color]").forEach(button => { button.disabled = editingDisabled || !canvas; });
+    });
     if (!canvas) {
+      fitButton.disabled = true;
       stackToggleButton.disabled = true;
       deleteButton.disabled = true;
       undoButton.disabled = true;
@@ -53,13 +66,14 @@
       return;
     }
     const hasSelection = canvas.getActiveObjects().length > 0;
-    stackToggleButton.disabled = !hasSelection;
-    deleteButton.disabled = !hasSelection;
+    fitButton.disabled = !fitted && canvas.getObjects().length === 0;
+    stackToggleButton.disabled = editingDisabled || !hasSelection;
+    deleteButton.disabled = editingDisabled || !hasSelection;
     const stackAction = selectionIsAtFront() ? "Send selection to back" : "Bring selection to front";
     stackToggleButton.setAttribute("aria-label", stackAction);
     stackToggleButton.title = stackAction;
-    undoButton.disabled = history.length <= 1;
-    clearButton.disabled = canvas.getObjects().length === 0;
+    undoButton.disabled = editingDisabled || history.length <= 1;
+    clearButton.disabled = editingDisabled || canvas.getObjects().length === 0;
   }
 
   function selectionIsAtFront() {
@@ -76,7 +90,10 @@
     const state = serialize();
     if (history[history.length - 1] !== state) history.push(state);
     if (history.length > MAX_HISTORY) history.shift();
-    documents.set(activeRoute, state);
+    activeDocument = JSON.parse(state);
+    if (window.umedApp && typeof window.umedApp.saveDrawing === "function") {
+      window.umedApp.saveDrawing(activeSlideUuid, activeDocument.objects.length ? activeDocument : null);
+    }
     updateActions();
   }
 
@@ -85,24 +102,23 @@
     restoring = true;
     canvas.loadFromJSON(state, () => {
       restoring = false;
+      applyFit();
       selectTool(activeTool);
       canvas.requestRenderAll();
       updateActions();
     });
   }
 
-  function saveCurrentDocument() {
-    if (canvas) documents.set(activeRoute, serialize());
-  }
-
-  function loadRoute(route) {
-    if (!route || route === activeRoute) return;
-    saveCurrentDocument();
-    activeRoute = route;
-    if (!canvas) return;
-    const state = documents.get(activeRoute) || JSON.stringify({ version: "5.3.0", objects: [] });
+  function setDocument(slideUuid, drawing) {
+    activeSlideUuid = slideUuid;
+    activeDocument = drawing || null;
+    fitted = false;
+    fitButton.setAttribute("aria-pressed", "false");
+    fitButton.setAttribute("aria-label", "Fit drawing");
+    fitButton.title = "Fit drawing";
+    const state = JSON.stringify(activeDocument || { version: "5.3.0", objects: [] });
     history = [state];
-    restore(state);
+    if (canvas) restore(state);
   }
 
   function resizeCanvas() {
@@ -110,22 +126,49 @@
     const width = Math.max(1, host.clientWidth);
     const height = Math.max(1, host.clientHeight);
     canvas.setDimensions({ width, height });
+    applyFit();
     canvas.calcOffset();
     canvas.requestRenderAll();
+  }
+
+  function applyFit() {
+    if (!canvas) return;
+    canvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
+    if (!fitted || !canvas.getObjects().length) return;
+    const bounds = canvas.getObjects().reduce((result, object) => {
+      const rect = object.getBoundingRect(true, true);
+      return {
+        left: Math.min(result.left, rect.left),
+        top: Math.min(result.top, rect.top),
+        right: Math.max(result.right, rect.left + rect.width),
+        bottom: Math.max(result.bottom, rect.top + rect.height)
+      };
+    }, { left: 0, top: 0, right: 0, bottom: 0 });
+    const padding = 20;
+    const drawingWidth = Math.max(1, bounds.right - Math.min(0, bounds.left) + padding * 2);
+    const drawingHeight = Math.max(1, bounds.bottom - Math.min(0, bounds.top) + padding * 2);
+    const zoom = Math.min(1, canvas.getWidth() / drawingWidth, canvas.getHeight() / drawingHeight);
+    const offsetX = padding * zoom - Math.min(0, bounds.left) * zoom;
+    const offsetY = padding * zoom - Math.min(0, bounds.top) * zoom;
+    canvas.setViewportTransform([zoom, 0, 0, zoom, offsetX, offsetY]);
   }
 
   function selectTool(tool) {
     activeTool = tool;
     toolButtons.forEach(button => button.setAttribute("aria-pressed", String(button.dataset.whiteboardTool === tool)));
     if (!canvas) return;
-    canvas.isDrawingMode = tool === "freehand";
+    const editingDisabled = readOnly || fitted;
+    canvas.isDrawingMode = !editingDisabled && tool === "freehand";
     if (canvas.freeDrawingBrush) {
       canvas.freeDrawingBrush.color = activeBorderColor;
       canvas.freeDrawingBrush.width = 3;
     }
-    canvas.selection = tool === "select";
-    canvas.defaultCursor = tool === "select" ? "default" : "crosshair";
-    canvas.forEachObject(object => { object.selectable = tool === "select"; object.evented = tool === "select"; });
+    canvas.selection = !editingDisabled && tool === "select";
+    canvas.defaultCursor = editingDisabled || tool === "select" ? "default" : "crosshair";
+    canvas.forEachObject(object => {
+      object.selectable = !editingDisabled && tool === "select";
+      object.evented = !editingDisabled && tool === "select";
+    });
     if (tool !== "select") canvas.discardActiveObject();
     canvas.requestRenderAll();
     updateActions();
@@ -239,7 +282,7 @@
       stopContextMenu: true
     });
     canvas.on("mouse:down", event => {
-      if (activeTool === "select" || activeTool === "freehand") return;
+      if (readOnly || fitted || activeTool === "select" || activeTool === "freehand") return;
       const pointer = canvas.getPointer(event.e);
       if (activeTool === "text") addText(pointer);
       else beginDrawing(pointer);
@@ -254,7 +297,7 @@
     canvas.on("selection:cleared", updateActions);
     resizeObserver = new ResizeObserver(resizeCanvas);
     resizeObserver.observe(host);
-    const initial = documents.get(activeRoute) || serialize();
+    const initial = JSON.stringify(activeDocument || { version: "5.3.0", objects: [] });
     history = [initial];
     restore(initial);
     selectTool(activeTool);
@@ -262,7 +305,7 @@
   }
 
   function setOpen(nextOpen) {
-    open = Boolean(nextOpen) && presenterModeActive;
+    open = Boolean(nextOpen) && (presenterModeActive || learnerModeActive);
     const toggleAction = open ? "Hide Whiteboard" : "Show Whiteboard";
     pane.hidden = !open;
     document.body.classList.toggle("whiteboard-open", open);
@@ -271,7 +314,6 @@
     toggle.title = toggleAction;
     if (!open) {
       setColorPopupOpen(null, false);
-      saveCurrentDocument();
       return;
     }
     if (!initializeCanvas()) {
@@ -288,7 +330,7 @@
   }
 
   function removeSelected() {
-    if (!canvas) return;
+    if (!canvas || readOnly || fitted) return;
     const selected = canvas.getActiveObjects();
     if (!selected.length) return;
     canvas.discardActiveObject();
@@ -297,7 +339,7 @@
   }
 
   function toggleSelectionStack() {
-    if (!canvas) return;
+    if (!canvas || readOnly || fitted) return;
     const selectedSet = new Set(canvas.getActiveObjects());
     if (!selectedSet.size) return;
     const selectedInStackOrder = canvas.getObjects().filter(object => selectedSet.has(object));
@@ -370,14 +412,28 @@
   stackToggleButton.addEventListener("click", toggleSelectionStack);
   deleteButton.addEventListener("click", removeSelected);
   undoButton.addEventListener("click", () => {
-    if (history.length <= 1) return;
+    if (readOnly || fitted || history.length <= 1) return;
     history.pop();
     const state = history[history.length - 1];
-    documents.set(activeRoute, state);
+    activeDocument = JSON.parse(state);
+    if (window.umedApp && typeof window.umedApp.saveDrawing === "function") {
+      window.umedApp.saveDrawing(activeSlideUuid, activeDocument.objects.length ? activeDocument : null);
+    }
     restore(state);
   });
+  fitButton.addEventListener("click", () => {
+    if ((!learnerModeActive && !presenterModeActive) || !canvas) return;
+    fitted = !fitted;
+    fitButton.setAttribute("aria-pressed", String(fitted));
+    fitButton.setAttribute("aria-label", fitted ? "Show drawing at actual size" : "Fit drawing");
+    fitButton.title = fitted ? "Show drawing at actual size" : "Fit drawing";
+    applyFit();
+    selectTool(activeTool);
+    canvas.requestRenderAll();
+    updateActions();
+  });
   clearButton.addEventListener("click", () => {
-    if (!canvas || !canvas.getObjects().length) return;
+    if (!canvas || readOnly || fitted || !canvas.getObjects().length) return;
     canvas.discardActiveObject();
     canvas.clear();
     canvas.backgroundColor = "#ffffff";
@@ -390,7 +446,7 @@
       openColorPicker.querySelector(".whiteboard-color-toggle").focus();
       return;
     }
-    if (!open || !canvas || event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement || event.target.isContentEditable) return;
+    if (!open || !canvas || readOnly || fitted || event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement || event.target.isContentEditable) return;
     const editingText = canvas.getActiveObject() && canvas.getActiveObject().isEditing;
     const shortcutKey = event.ctrlKey || event.metaKey;
     const key = event.key.toLowerCase();
@@ -408,13 +464,44 @@
       undoButton.click();
     }
   });
-  window.addEventListener("umed:slide-loaded", event => loadRoute(event.detail && event.detail.key));
-
   toggle.hidden = true;
   updateActions();
   window.umedPresenterWhiteboard = {
+    setDocument,
+    setReadOnly(value) {
+      readOnly = Boolean(value);
+      selectTool(activeTool);
+      updateActions();
+    },
+    setLearnerMode(active) {
+      learnerModeActive = Boolean(active);
+      if (learnerModeActive) {
+        const notepad = document.getElementById("learner-notepad");
+        notepad.append(pane);
+        pane.setAttribute("aria-label", "Learner sketchpad");
+        fitButton.hidden = false;
+        toggle.hidden = true;
+        setOpen(true);
+      } else {
+        fitted = false;
+        fitButton.setAttribute("aria-pressed", "false");
+        fitButton.hidden = true;
+        if (canvas) applyFit();
+        if (!presenterModeActive) setOpen(false);
+        if (originalNextSibling) originalParent.insertBefore(pane, originalNextSibling);
+        else originalParent.append(pane);
+      }
+    },
     setPresenterMode(active) {
       presenterModeActive = Boolean(active);
+      if (presenterModeActive) {
+        learnerModeActive = false;
+        fitted = false;
+        fitButton.hidden = false;
+        pane.setAttribute("aria-label", "Presenter whiteboard");
+        if (originalNextSibling) originalParent.insertBefore(pane, originalNextSibling);
+        else originalParent.append(pane);
+      }
       toggle.hidden = !presenterModeActive;
       if (!presenterModeActive) setOpen(false);
     }

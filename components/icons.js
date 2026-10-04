@@ -40,6 +40,7 @@
     delete: '<svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M4.5 6h11m-7-2h3l.75 2h-4.5zM6 6l.75 10h6.5L14 6M8.5 9v4m3-4v4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     undo: '<svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M7 5 3.5 8.5 7 12M4 8.5h7a5 5 0 0 1 5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     clear: '<svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="m4 13 7.8-8.5 4.2 4-7.8 8.5H4zm5.5 1.5 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    fit: '<svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M8 3H3v5m9-5h5v5M8 17H3v-5m9 5h5v-5M3 8l4-4m10 4-4-4M3 12l4 4m10-4-4 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     // Single disclosure-triangle glyph reused for both states: pointing down reads as "expanded,
     // click to collapse"; CSS rotates it -90deg (pointing right) for "collapsed, click to expand".
     chevron: '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">' +

@@ -83,6 +83,7 @@
     editor: document.getElementById("editor-pane"),
     notepad: document.getElementById("learner-notepad"),
     notepadClose: document.getElementById("learner-notepad-close"),
+    sketchpadToggle: document.getElementById("learner-sketchpad-toggle"),
     notepadLabel: document.getElementById("learner-notepad-label"),
     notepadText: document.getElementById("learner-notepad-text"),
     notesExport: document.getElementById("learner-notes-export"),
@@ -141,6 +142,7 @@
   let presenterModeActive = false;
   let presenterFontPercent = 100;
   let notepadOpen = false;
+  let sketchpadOpen = false;
   let activeNotepadKey = null;
   let notepadButton = null;
   const slideNotes = new Map();
@@ -155,7 +157,7 @@
   let sidebarCollapsed = false;
   const UMED_GPT_WINDOW_NAME = "umed-chatbot";
   const NOTES_FILE_FORMAT = "umed-learner-notes";
-  const NOTES_FILE_SCHEMA_VERSION = 1;
+  const NOTES_FILE_SCHEMA_VERSION = 2;
   const MAX_NOTES_FILE_BYTES = 10 * 1024 * 1024;
   const UMED_GPT_TAB_OPENED_KEY = "umed-gpt-tab-opened";
   const UMED_GPT_TOAST_SUPPRESSED_KEY = "umed-gpt-toast-suppressed";
@@ -233,8 +235,8 @@
 
   function persistNote(slideUuid) {
     if (!slideUuid || !identity.appUuid || !window.umedLearnerNotes) return Promise.resolve(false);
-    const text = slideNotes.get(slideUuid) || "";
-    return window.umedLearnerNotes.saveNote(identity.appUuid, slideUuid, text)
+    const note = slideNotes.get(slideUuid) || { text: "", drawing: null };
+    return window.umedLearnerNotes.saveNote(identity.appUuid, slideUuid, note)
       .catch(error => {
         console.warn("Learner note could not be saved.", error);
         return false;
@@ -257,8 +259,8 @@
 
   function updateNotepadViewMode() {
     const sharedNotesAvailable = sharedNotes !== null;
-    elements.notepadLabel.textContent = sharedNotesAvailable
-      ? (viewingSharedNotes ? "Viewing shared notes" : "Viewing my notes")
+    elements.notepadLabel.textContent = sketchpadOpen ? (viewingSharedNotes ? "Shared sketches" : "Sketches") : sharedNotesAvailable
+      ? (viewingSharedNotes ? "Shared notes" : "My notes")
       : "Notes";
     elements.notepad.setAttribute("aria-label", viewingSharedNotes ? "Shared slide notes" : "Slide notes");
     elements.notesToggle.hidden = !sharedNotesAvailable;
@@ -268,6 +270,22 @@
     elements.notepadText.placeholder = viewingSharedNotes
       ? "No shared note is available for this slide."
       : "Keep notes here - they save automatically in this browser.";
+    if (window.umedPresenterWhiteboard) window.umedPresenterWhiteboard.setReadOnly(viewingSharedNotes && !presenterModeActive);
+  }
+
+  function activeNotesMap() {
+    return viewingSharedNotes && !presenterModeActive ? sharedNotes : slideNotes;
+  }
+
+  function syncActiveDrawing() {
+    if (!window.umedPresenterWhiteboard) return;
+    if (!activeNotepadKey) {
+      window.umedPresenterWhiteboard.setDocument(null, null);
+      return;
+    }
+    const note = activeNotesMap() && activeNotesMap().get(activeNotepadKey);
+    window.umedPresenterWhiteboard.setDocument(activeNotepadKey, note ? note.drawing : null);
+    window.umedPresenterWhiteboard.setReadOnly(viewingSharedNotes && !presenterModeActive);
   }
 
   function loadNote(slideUuid) {
@@ -279,24 +297,29 @@
       elements.notepadText.value = "";
       return;
     }
-    if (viewingSharedNotes) {
-      elements.notepadText.value = sharedNotes && sharedNotes.has(slideUuid) ? sharedNotes.get(slideUuid) : "";
+    if (viewingSharedNotes && !presenterModeActive) {
+      const note = sharedNotes && sharedNotes.get(slideUuid);
+      elements.notepadText.value = note ? note.text : "";
+      syncActiveDrawing();
       return;
     }
     if (slideNotes.has(slideUuid)) {
-      elements.notepadText.value = slideNotes.get(slideUuid);
+      elements.notepadText.value = slideNotes.get(slideUuid).text || "";
+      syncActiveDrawing();
       return;
     }
 
     elements.notepadText.value = "";
+    syncActiveDrawing();
     if (!identity.appUuid || !window.umedLearnerNotes) return;
     window.umedLearnerNotes.getNote(identity.appUuid, slideUuid)
-      .then(text => {
+      .then(note => {
         if (loadVersion !== noteLoadVersion || activeNotepadKey !== slideUuid) return;
-        if (!slideNotes.has(slideUuid) && text !== null) slideNotes.set(slideUuid, text);
+        if (!slideNotes.has(slideUuid) && note !== null) slideNotes.set(slideUuid, note);
         if (editVersion === noteEditVersion) {
-          elements.notepadText.value = slideNotes.get(slideUuid) || "";
+          elements.notepadText.value = (slideNotes.get(slideUuid) || {}).text || "";
         }
+        syncActiveDrawing();
       })
       .catch(error => console.warn("Learner note could not be loaded.", error));
   }
@@ -357,11 +380,12 @@
       ? await window.umedLearnerNotes.getAllNotes(identity.appUuid)
       : [];
     const records = new Map(storedNotes.map(note => [note.slideUuid, { ...note }]));
-    slideNotes.forEach((text, slideUuid) => {
-      if (text === "") records.delete(slideUuid);
+    slideNotes.forEach((note, slideUuid) => {
+      const hasDrawing = Boolean(note.drawing && Array.isArray(note.drawing.objects) && note.drawing.objects.length);
+      if (note.text === "" && !hasDrawing) records.delete(slideUuid);
       else {
         const existing = records.get(slideUuid) || {};
-        records.set(slideUuid, { ...existing, slideUuid, text, updatedAt: existing.updatedAt || new Date().toISOString() });
+        records.set(slideUuid, { ...existing, ...note, slideUuid, updatedAt: existing.updatedAt || new Date().toISOString() });
       }
     });
 
@@ -372,7 +396,8 @@
         slideUuid: note.slideUuid,
         slideTitle: current.slideTitle || note.slideTitle || null,
         routeAtExport: current.routeAtExport || note.routeAtExport || null,
-        text: note.text,
+        text: typeof note.text === "string" ? note.text : "",
+        drawing: note.drawing || null,
         updatedAt: note.updatedAt || null
       };
     }).sort((a, b) => (a.routeAtExport || a.slideUuid).localeCompare(b.routeAtExport || b.slideUuid));
@@ -405,11 +430,43 @@
     if (!Array.isArray(payload.notes)) throw new Error("The notes file does not contain a valid notes list.");
 
     const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+    const drawingTypes = new Set(["line", "rect", "ellipse", "triangle", "group", "i-text", "path"]);
+    const validateDrawingValue = (value, depth = 0) => {
+      if (depth > 12) throw new Error("A drawing is nested too deeply.");
+      if (value === null || typeof value === "string" || typeof value === "boolean") return;
+      if (typeof value === "number") {
+        if (!Number.isFinite(value)) throw new Error("A drawing contains an invalid number.");
+        return;
+      }
+      if (Array.isArray(value)) {
+        if (value.length > 20000) throw new Error("A drawing contains an oversized list.");
+        value.forEach(item => validateDrawingValue(item, depth + 1));
+        return;
+      }
+      if (!value || typeof value !== "object" || Object.getPrototypeOf(value) !== Object.prototype) {
+        throw new Error("A drawing contains an invalid value.");
+      }
+      Object.entries(value).forEach(([key, item]) => {
+        if (key === "__proto__" || key === "prototype" || key === "constructor") {
+          throw new Error("A drawing contains an unsafe property.");
+        }
+        if (key === "type" && typeof item === "string" && !drawingTypes.has(item)) {
+          throw new Error("A drawing contains an unsupported object type.");
+        }
+        validateDrawingValue(item, depth + 1);
+      });
+    };
     const seen = new Set();
     return payload.notes.map(note => {
       if (!note || typeof note !== "object" || !uuidPattern.test(note.slideUuid) || typeof note.text !== "string") {
         throw new Error("The notes file contains an invalid note entry.");
       }
+      const drawing = note.drawing === null || note.drawing === undefined ? null : note.drawing;
+      if (drawing !== null && (!drawing || typeof drawing !== "object" || Array.isArray(drawing) || !Array.isArray(drawing.objects))) {
+        throw new Error("The notes file contains an invalid drawing entry.");
+      }
+      if (drawing && drawing.objects.length > 5000) throw new Error("A drawing contains too many objects.");
+      if (drawing) validateDrawingValue(drawing);
       if (seen.has(note.slideUuid)) throw new Error("The notes file contains duplicate Slide entries.");
       seen.add(note.slideUuid);
       return {
@@ -417,9 +474,10 @@
         slideTitle: typeof note.slideTitle === "string" ? note.slideTitle : null,
         routeAtExport: typeof note.routeAtExport === "string" ? note.routeAtExport : null,
         text: note.text,
+        drawing,
         updatedAt: typeof note.updatedAt === "string" ? note.updatedAt : null
       };
-    }).filter(note => note.text !== "");
+    }).filter(note => note.text !== "" || (note.drawing && note.drawing.objects.length));
   }
 
   async function toggleSharedNotes() {
@@ -449,7 +507,7 @@
 
     if (choice === "View shared notes") {
       await flushPendingNote();
-      sharedNotes = new Map(notes.map(note => [note.slideUuid, note.text]));
+      sharedNotes = new Map(notes.map(note => [note.slideUuid, note]));
       viewingSharedNotes = true;
       loadNote(activeNotepadKey);
       return;
@@ -465,9 +523,9 @@
       throw new Error("The notes could not be replaced because browser storage is unavailable.");
     }
     viewingSharedNotes = false;
-    sharedNotes = new Map(notes.map(note => [note.slideUuid, note.text]));
+    sharedNotes = new Map(notes.map(note => [note.slideUuid, note]));
     slideNotes.clear();
-    notes.forEach(note => slideNotes.set(note.slideUuid, note.text));
+    notes.forEach(note => slideNotes.set(note.slideUuid, note));
     loadNote(activeNotepadKey);
     window.alert(`Replaced your notes with ${notes.length} notes from the selected file.`);
   }
@@ -493,6 +551,7 @@
   function setNotepadOpen(nextOpen) {
     if (!nextOpen) flushPendingNote();
     notepadOpen = Boolean(nextOpen) && !editorModeActive && !presenterModeActive;
+    if (!notepadOpen) setSketchpadOpen(false);
     elements.notepad.hidden = !notepadOpen;
     document.body.classList.toggle("notepad-open", notepadOpen);
     if (notepadButton) {
@@ -500,7 +559,39 @@
       notepadButton.setAttribute("aria-label", notepadOpen ? "Hide slide notes" : "Show slide notes");
       notepadButton.title = notepadOpen ? "Hide slide notes" : "Show slide notes";
     }
-    if (notepadOpen) elements.notepadText.focus();
+    if (notepadOpen && !sketchpadOpen) elements.notepadText.focus();
+  }
+
+  function applySketchpadMode() {
+    elements.notepadText.hidden = sketchpadOpen;
+    if (sketchpadOpen) elements.notepadLabel.removeAttribute("for");
+    else elements.notepadLabel.setAttribute("for", "learner-notepad-text");
+    elements.sketchpadToggle.setAttribute("aria-pressed", String(sketchpadOpen));
+    elements.sketchpadToggle.setAttribute("aria-label", sketchpadOpen ? "Show notes" : "Show sketches");
+    elements.sketchpadToggle.title = sketchpadOpen ? "Show notes" : "Show sketches";
+    elements.notepadLabel.textContent = sketchpadOpen ? (viewingSharedNotes ? "Shared sketches" : "Sketches") : (sharedNotes !== null
+      ? (viewingSharedNotes ? "Shared notes" : "My notes")
+      : "Notes");
+    if (window.umedPresenterWhiteboard) {
+      window.umedPresenterWhiteboard.setLearnerMode(sketchpadOpen);
+      syncActiveDrawing();
+    }
+    if (!sketchpadOpen && notepadOpen) elements.notepadText.focus();
+  }
+
+  function setSketchpadOpen(nextOpen) {
+    sketchpadOpen = Boolean(nextOpen) && notepadOpen && !presenterModeActive;
+    if (!sketchpadOpen) {
+      applySketchpadMode();
+      return;
+    }
+    loadWhiteboardScripts()
+      .then(() => applySketchpadMode())
+      .catch(error => {
+        sketchpadOpen = false;
+        applySketchpadMode();
+        console.warn("The Learner sketchpad could not be loaded.", error);
+      });
   }
 
   const sorted = (items) => items.slice().sort((a, b) => a.order - b.order);
@@ -2203,6 +2294,7 @@
   elements.presenterNext.innerHTML = (window.umedIcons && window.umedIcons.next) || "\u2192";
   elements.presenterMenuToggle.innerHTML = (window.umedIcons && window.umedIcons.menu) || "\u2630";
   elements.presenterWhiteboardToggle.innerHTML = (window.umedIcons && window.umedIcons.whiteboard) || "\u270e";
+  elements.sketchpadToggle.innerHTML = (window.umedIcons && window.umedIcons.whiteboard) || "\u270e";
   elements.presenterFontDecrease.innerHTML = (window.umedIcons && window.umedIcons.subtract) || "\u2212";
   elements.presenterFontIncrease.innerHTML = (window.umedIcons && window.umedIcons.add) || "+";
   elements.presenterModeToggle.innerHTML = (window.umedIcons && window.umedIcons.presenter) || "\u25b6";
@@ -2279,10 +2371,14 @@
   function syncWhiteboardMode() {
     if (window.umedPresenterWhiteboard) {
       window.umedPresenterWhiteboard.setPresenterMode(presenterModeActive);
+      syncActiveDrawing();
     } else if (presenterModeActive) {
       loadWhiteboardScripts()
         .then(() => {
-          if (window.umedPresenterWhiteboard) window.umedPresenterWhiteboard.setPresenterMode(presenterModeActive);
+          if (window.umedPresenterWhiteboard) {
+            window.umedPresenterWhiteboard.setPresenterMode(presenterModeActive);
+            syncActiveDrawing();
+          }
         })
         .catch(error => console.warn("The Presenter whiteboard could not be loaded.", error));
     }
@@ -2340,12 +2436,14 @@
   });
   elements.notepadText.addEventListener("input", event => {
     if (!activeNotepadKey || viewingSharedNotes) return;
-    slideNotes.set(activeNotepadKey, event.currentTarget.value);
+    const note = slideNotes.get(activeNotepadKey) || { text: "", drawing: null };
+    slideNotes.set(activeNotepadKey, { ...note, text: event.currentTarget.value });
     noteEditVersion += 1;
     queueNoteSave(activeNotepadKey);
   });
   elements.notepadText.addEventListener("blur", flushPendingNote);
   elements.notepadClose.addEventListener("click", () => setNotepadOpen(false));
+  elements.sketchpadToggle.addEventListener("click", () => setSketchpadOpen(!sketchpadOpen));
   elements.notesExport.addEventListener("click", event => {
     event.preventDefault();
     exportNotes().catch(error => window.alert(`Notes could not be exported: ${error.message}`));
@@ -2423,7 +2521,15 @@
   window.umedApp = {
     refreshSlide: () => { if (currentDraw) currentDraw(); },
     refreshNavigation: () => { renderSubjectMenu(); renderSidebar(); rebuildSearchIndex(); },
-    getCurrentSlideInfo: () => currentInfo
+    getCurrentSlideInfo: () => currentInfo,
+    getCurrentSlideUuid: () => activeNotepadKey,
+    saveDrawing: (slideUuid, drawing) => {
+      if (!slideUuid || (viewingSharedNotes && !presenterModeActive)) return;
+      const note = slideNotes.get(slideUuid) || { text: "", drawing: null };
+      slideNotes.set(slideUuid, { ...note, drawing });
+      noteEditVersion += 1;
+      queueNoteSave(slideUuid);
+    }
   };
 
   // Editor Mode remains the remembered authoring state while Presenter Mode temporarily suppresses

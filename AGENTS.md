@@ -70,8 +70,8 @@ The app has three page states:
     - Use Sortable.js for drag-and-drop list reordering, both in Editor mode (e.g.
       the Slides menu's per-Level lists, and sidebar Category/Section lists) and
       in widget blocks (e.g. "put these in order" exercises).
-    - Use Fabric.js for the interactive whiteboard; loaded when Presenter mode is 
-      first entered.
+    - Use Fabric.js for the interactive whiteboard/sketchpad; loaded when Presenter
+      mode or the Learner sketchpad is first opened.
 
 Application code should remain shared, modular and generic, using a standardized 
 data structure for all content.
@@ -297,11 +297,12 @@ repository that wraps this instance of the `um-agentic-ed-framework` repository.
 ```
 
 Script loading: `index.html` loads the Framework scripts the Learner view needs
-(components and `app/main.js`). Editor mode and the Presenter whiteboard are used
+(components and `app/main.js`). Editor mode and the whiteboard/sketchpad are used
 only occasionally, so `main.js` loads them on first use instead:
 - Turning on Editor mode (Ctrl-click on the app title) loads `editor/file-access.js` 
   and `editor/editor.js`.
-- Entering Presenter mode loads Fabric.js and `components/presenter-whiteboard.js`.
+- Entering Presenter mode or opening the Learner sketchpad loads Fabric.js and
+  `components/presenter-whiteboard.js`.
 New Framework code that is only needed in one of these modes should be loaded the 
 same way, not added to `index.html`.
 
@@ -596,15 +597,23 @@ window.umedAppContentIndex = {
 
 # Learner note taking
 
-To facilitate active learning a textarea notepad can be opened in Learner mode 
-where users can record notes about content Slides and App, Subject, Category, and
-Section landing Slides. Once opened, the notepad remains open as the Learner navigates
-among these Slides until explicitly closed. Notes are cached in memory for immediate
-interaction and saved automatically to IndexedDB using the immutable App and Slide
-UUIDs, so they persist across browser sessions without modifying content files.
-Learners may export an unencrypted `<appName>.notes.json` archival/shareable copy. 
-A valid same-App notes file can either atomically replace the Learner's saved 
-notes or be viewed temporarily as read-only shared notes without altering their own.
+To facilitate active learning a notepad can be opened in Learner mode where users
+can record text or switch to a Sketchpad to draw about content Slides and App,
+Subject, Category, and Section landing Slides. Only one note-taking view is visible
+at a time. Presenter whiteboard and Learner Sketchpad drawings are the same drawing
+for a Slide. Drawings retain fixed object coordinates and pixel dimensions as the
+canvas changes size; Fit Drawing may temporarily scale a drawing down to show it
+completely in either mode and must disable editing while fitted.
+
+Once opened, the notepad remains open as the Learner navigates among Slides until
+explicitly closed. Each UUID-keyed note record contains both a text field and a
+Fabric.js drawing field, either of which may be empty. Notes are cached in memory
+for immediate interaction and saved automatically to IndexedDB using the immutable
+App and Slide UUIDs, so they persist across browser sessions without modifying
+content files. Learners may export an unencrypted `<appName>.notes.json`
+archival/shareable copy containing both modalities. A valid same-App notes file can
+either atomically replace the Learner's saved notes or be viewed temporarily as
+read-only shared notes without altering their own.
 
 # Educational content generation guidelines
 
