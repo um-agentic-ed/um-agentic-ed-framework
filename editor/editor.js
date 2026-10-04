@@ -13,7 +13,7 @@
 
   const REFRESH_DELAY_MS = 300;
   let refreshTimer = null;
-  let current = null; // { key, kind, assetBasePath, src } from app.js's umed:slide-loaded event
+  let current = null; // { key, kind, assetBasePath, src } from main.js's umed:slide-loaded event
   const dirtyKeys = new Set(); // keys with unsaved in-memory edits, tracked across navigation
   // Deep clones of each key's last-saved (or first-seen-this-session) content, used to revert
   // in-memory edits when Discard Changes is clicked. Refreshed after every successful save and
@@ -23,7 +23,7 @@
   let currentDiscardButton = null;
 
   // Editor mode only shows this pane after a Ctrl-click (Cmd-click on Mac) on the app title (see
-  // app.js resolveRoute/editorModeActive), so this is a reliable guard against building forms
+  // main.js resolveRoute/editorModeActive), so this is a reliable guard against building forms
   // while the pane is hidden.
   function isEditorActive() {
     return !pane.hidden;
@@ -439,7 +439,7 @@
   }
 
   // Resolves the folder (relative to the content root handle) that an image block's files
-  // belong in, matching the imageBasePath logic in app.js's renderBlock.
+  // belong in, matching the imageBasePath logic in main.js's renderBlock.
   function imageRelativeDir(block) {
     if ((block.imageSource || "slide") === "shared") return "assets/images";
     return contentRelativePath((current && current.assetBasePath) || window.umedContentRoot);
@@ -1088,7 +1088,7 @@
     const handle = document.createElement("span");
     // A distinct class from the outer block handle (".editor-block-handle") keeps this nested
     // choices Sortable's own drag detection from being triggered by the outer blocks Sortable
-    // (see attachBlocksSortable's handle option) — both share the same visual style in app.css.
+    // (see attachBlocksSortable's handle option) — both share the same visual style in framework.css.
     handle.className = "editor-choice-handle";
     handle.textContent = DRAG_HANDLE_GLYPH;
     handle.setAttribute("aria-hidden", "true");
@@ -1423,7 +1423,7 @@
   }
 
   // Writes updated order/level values (from window.umedAppContentIndex, already mutated by the
-  // Slides menu's drag-and-drop handler in app.js) back to each affected Slide's own slide.js
+  // Slides menu's drag-and-drop handler in main.js) back to each affected Slide's own slide.js
   // file, keeping in-memory unsaved edits for any currently-open Slide intact.
   async function writeSlideOrderFiles(rootHandle, subjectId, categoryId, sectionId, slideIndexEntries) {
     for (const entry of slideIndexEntries) {
@@ -1453,7 +1453,7 @@
     await writeIndexFile(rootHandle);
   }
 
-  // Creates a new Slide's slide.js file (initial content built by app.js's "+" button in the
+  // Creates a new Slide's slide.js file (initial content built by main.js's "+" button in the
   // Slides menu) and rewrites any other Slides whose order/level shifted to make room for it.
   async function createSlide(subjectId, categoryId, sectionId, data, otherChangedEntries) {
     if (!window.umedEditorFS) throw new Error("File system access is unavailable.");
@@ -1519,7 +1519,7 @@
   }
 
   // Creates a new Subject's subject.js landing file (from the Subject menu's "+" button) and
-  // updates content-index.js, which app.js has already mutated in memory.
+  // updates content-index.js, which main.js has already mutated in memory.
   async function createSubject(subjectId, data) {
     if (!window.umedEditorFS) throw new Error("File system access is unavailable.");
     const rootHandle = await window.umedEditorFS.getContentRootHandle();
@@ -1531,7 +1531,7 @@
   }
 
   // Creates a new Category's category.js overview file (from the sidebar's "+" button) and
-  // updates content-index.js, which app.js has already mutated in memory.
+  // updates content-index.js, which main.js has already mutated in memory.
   async function createCategory(subjectId, categoryId, data) {
     if (!window.umedEditorFS) throw new Error("File system access is unavailable.");
     const rootHandle = await window.umedEditorFS.getContentRootHandle();
@@ -1544,7 +1544,7 @@
   }
 
   // Creates a new Section's section.js overview file (from the sidebar's "+" button) and updates
-  // content-index.js, which app.js has already mutated in memory.
+  // content-index.js, which main.js has already mutated in memory.
   async function createSection(subjectId, categoryId, sectionId, data) {
     if (!window.umedEditorFS) throw new Error("File system access is unavailable.");
     const rootHandle = await window.umedEditorFS.getContentRootHandle();
@@ -1730,7 +1730,7 @@
     refreshIfActive();
   });
 
-  // Read-only-from-app.js's-perspective hook so the Slides menu's and sidebar's drag-and-drop
+  // Read-only-from-main.js's-perspective hook so the Slides menu's and sidebar's drag-and-drop
   // reordering and "+" add buttons can persist changes without duplicating file-serialization
   // logic.
   window.umedEditor = { persistSlideOrder, createSlide, persistIndex, createSubject, createCategory, createSection, moveSection };

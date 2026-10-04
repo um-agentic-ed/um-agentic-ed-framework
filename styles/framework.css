@@ -1,3 +1,25 @@
+/*
+ * um-agentic-ed Framework stylesheet. Sections:
+ *   1. Theme variables and page basics
+ *   2. App header
+ *   3. Page layout and sidebar
+ *   4. Content pane and toolbar
+ *   5. Slides menu
+ *   6. Slide content and blocks
+ *   7. Content row and Learner notepad
+ *   8. Presenter whiteboard
+ *   9. Editor Mode
+ *   10. Shared components
+ *   11. Search results and utilities
+ *   12. GPT chatbot notice
+ *   13. Narrow screens
+ * The App's root app.css loads after this file and overrides the --umed-brand-* variables.
+ */
+
+/* ==========================================================================
+   1. Theme variables and page basics
+   Default branding variables (overridden by the Parent root app.css), box model, no page scroll.
+   ========================================================================== */
 :root {
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
   color: #343a40;
@@ -23,6 +45,10 @@ body { margin: 0; }
 button, input { font: inherit; }
 button { cursor: pointer; }
 
+/* ==========================================================================
+   2. App header
+   Title, Subject menu, search box, header buttons and Presenter Mode navigation.
+   ========================================================================== */
 .app-header {
   height: 64px;
   padding-right: 0.65rem;
@@ -159,6 +185,10 @@ button { cursor: pointer; }
 .header-circle-button:disabled { opacity: .4; cursor: default; }
 .presenter-mode-toggle[aria-pressed="true"] { background: var(--umed-brand-hover-bg); }
 
+/* ==========================================================================
+   3. Page layout and sidebar
+   Sidebar with Category and Section links, plus its Editor Mode drag and add controls.
+   ========================================================================== */
 .app-layout { height: calc(100vh - 64px); display: flex; overflow: hidden; }
 #sidebar { 
   flex: 0 0 275px;
@@ -235,6 +265,10 @@ button { cursor: pointer; }
   transform: translate(-50%, -50%) scale(1);
 }
 
+/* ==========================================================================
+   4. Content pane and toolbar
+   Main pane, Prev/Next, Level and notes/chatbot buttons, Presenter Mode adjustments.
+   ========================================================================== */
 .main-pane {
   flex: 1 1 auto;
   min-width: 0;
@@ -316,6 +350,10 @@ body.presenter-mode .slide-content .gpt-followups h2 { font-size: 1.1em; }
   box-shadow: none;
 }
 
+/* ==========================================================================
+   5. Slides menu
+   Shared panel styling and the per-Level Slide list, including Editor Mode drag and add controls.
+   ========================================================================== */
 .slide-menu, .slide-content, .editor-pane, .presenter-whiteboard, .learner-notepad {
   padding: 1.25rem;
   background: #fff;
@@ -383,6 +421,11 @@ body.presenter-mode .slide-content .gpt-followups h2 { font-size: 1.1em; }
   pointer-events: auto;
   transform: translate(-50%, -50%) scale(1);
 }
+
+/* ==========================================================================
+   6. Slide content and blocks
+   Slide text and bottom navigation, data files, widgets, questions, GPT follow-ups, trusted sources.
+   ========================================================================== */
 .slide-content { padding-bottom: 1.15rem; line-height: 1.6; } /* min-height: 300px; */
 .slide-bottom-navigation {
   display: flex;
@@ -483,6 +526,9 @@ body.presenter-mode .slide-content .gpt-followups h2 { font-size: 1.1em; }
 .gpt-followup-ask-button:hover, .gpt-followup-ask-button:focus-visible { background: #eef3f6; }
 .gpt-followup-ask-button svg { display: block; }
 
+/* ==========================================================================
+   7. Content row and Learner notepad
+   ========================================================================== */
 .content-editor-row { display: flex; align-items: flex-start; gap: 1.25rem; flex: 1 1 0; min-height: 0; }
 .content-editor-row .slide-content { flex: 1 1 0; min-width: 0; }
 .learner-notepad {
@@ -540,6 +586,10 @@ body.presenter-mode .slide-content .gpt-followups h2 { font-size: 1.1em; }
   line-height: 1.5;
 }
 .learner-notepad textarea:focus { outline: 3px solid rgba(0, 90, 156, .18); outline-offset: -3px; }
+
+/* ==========================================================================
+   8. Presenter whiteboard
+   ========================================================================== */
 .presenter-whiteboard {
   display: flex;
   flex-direction: column;
@@ -641,6 +691,11 @@ body.presenter-mode .slide-content .gpt-followups h2 { font-size: 1.1em; }
   .whiteboard-toolbar-group { flex: 1 1 auto; flex-wrap: wrap; }
   .whiteboard-drawing-tools { flex: 1 1 100%; }
 }
+
+/* ==========================================================================
+   9. Editor Mode
+   Editor pane, forms, block fieldsets, file drop zones, Add-block menu.
+   ========================================================================== */
 /* Editor Mode is only ever active for file:/// URLs on Chromium/Safari, which support :has(). */
 #educational-content:has(.content-editor-row #editor-pane:not([hidden])) { max-width: 2200px; }
 #educational-content:has(.content-editor-row #learner-notepad:not([hidden])) { max-width: 2200px; }
@@ -888,6 +943,10 @@ body.presenter-mode .slide-content .gpt-followups h2 { font-size: 1.1em; }
   font-size: .85rem;
 }
 
+/* ==========================================================================
+   10. Shared components
+   Tooltip and confirm/prompt dialogs.
+   ========================================================================== */
 /* Standard hover/focus tooltip: pair with window.umedComponents.attachTooltip(element, text). */
 .has-tooltip { position: relative; }
 .has-tooltip::after {
@@ -929,6 +988,9 @@ body.presenter-mode .slide-content .gpt-followups h2 { font-size: 1.1em; }
 .confirm-dialog-actions button { padding: .45rem .9rem; color: var(--umed-brand-accent); background: #fff; border: 1px solid #9ba7b1; border-radius: 4px; }
 .confirm-dialog-confirm { color: #fff; background: #b3261e; border-color: #b3261e; }
 
+/* ==========================================================================
+   11. Search results and utilities
+   ========================================================================== */
 .search-results {
   position: absolute;
   z-index: 2;
@@ -951,6 +1013,9 @@ body.presenter-mode .slide-content .gpt-followups h2 { font-size: 1.1em; }
 .search-results a.search-results-slide { padding-left: 2.6rem; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); }
 
+/* ==========================================================================
+   12. GPT chatbot notice
+   ========================================================================== */
 .umed-gpt-toast {
   position: fixed;
   top: 0;
@@ -985,6 +1050,9 @@ body.presenter-mode .slide-content .gpt-followups h2 { font-size: 1.1em; }
 .umed-gpt-toast-close:hover, .umed-gpt-toast-close:focus-visible { background: #eef1f3; }
 .umed-gpt-toast-suppress { display: block; margin-top: .75rem; font-size: .85rem; }
 
+/* ==========================================================================
+   13. Narrow screens
+   ========================================================================== */
 @media (max-width: 700px) {
   .app-layout { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }
   #sidebar { display: flex; gap: .5rem; overflow-x: auto; overflow-y: visible; }

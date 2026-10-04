@@ -20,7 +20,9 @@
   let resizeObserver = null;
   let presenterModeActive = false;
   let open = false;
-  let activeRoute = "app-overview";
+  // This script loads the first time Presenter Mode is entered, so start from the Slide on screen.
+  const initialInfo = window.umedApp && window.umedApp.getCurrentSlideInfo();
+  let activeRoute = (initialInfo && initialInfo.key) || "app-overview";
   let activeTool = "select";
   let activeBorderColor = "#111111";
   let activeFillColor = "#d9dde1";

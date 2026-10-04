@@ -6,6 +6,59 @@
   // The one place the content folder path is declared; the Editor and widget host read it too.
   const CONTENT_ROOT = window.umedContentRoot = "src/content";
   const contentStore = window.umedAppContent = window.umedAppContent || {};
+
+  // Editor Mode and the Presenter whiteboard are only needed occasionally, so their scripts (and
+  // the Fabric.js library the whiteboard uses) are loaded on first use instead of at page load. Framework files are located relative to this script so hosting paths do not matter.
+  const FRAMEWORK_URL = document.currentScript
+    ? new URL("../", document.currentScript.src).href
+    : new URL("src/um-agentic-ed-framework/", document.baseURI).href;
+  const FABRIC_URL = "https://cdn.jsdelivr.net/npm/fabric@5.3.0/dist/fabric.min.js";
+
+  function loadScript(src) {
+    return new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = src;
+      script.onload = () => resolve();
+      script.onerror = () => {
+        script.remove();
+        reject(new Error(`Could not load ${src}`));
+      };
+      document.head.append(script);
+    });
+  }
+
+  // Each loader runs once and is shared by every caller; a failure clears it so a later attempt
+  // can retry.
+  let editorScriptsPromise = null;
+  function loadEditorScripts() {
+    if (!editorScriptsPromise) {
+      editorScriptsPromise = Promise.all([
+        loadScript(`${FRAMEWORK_URL}editor/file-access.js`),
+        loadScript(`${FRAMEWORK_URL}editor/editor.js`)
+      ]).catch(error => {
+        editorScriptsPromise = null;
+        throw error;
+      });
+    }
+    return editorScriptsPromise;
+  }
+
+  let whiteboardScriptsPromise = null;
+  function loadWhiteboardScripts() {
+    if (!whiteboardScriptsPromise) {
+      // The whiteboard reports its own "drawing tools could not be loaded" message if Fabric.js is
+      // unavailable, so a Fabric failure is not fatal here.
+      whiteboardScriptsPromise = Promise.all([
+        loadScript(FABRIC_URL).catch(error => console.warn(error)),
+        loadScript(`${FRAMEWORK_URL}components/presenter-whiteboard.js`)
+      ]).catch(error => {
+        whiteboardScriptsPromise = null;
+        throw error;
+      });
+    }
+    return whiteboardScriptsPromise;
+  }
+
   const elements = {
     appLayout: document.querySelector(".app-layout"),
     sidebar: document.getElementById("sidebar"),
@@ -2157,6 +2210,20 @@
     applyPresenterFontSize();
   });
 
+  // Presenter Mode itself never waits for the whiteboard: its scripts load in the background the
+  // first time the mode is entered, and then receive the current mode.
+  function syncWhiteboardMode() {
+    if (window.umedPresenterWhiteboard) {
+      window.umedPresenterWhiteboard.setPresenterMode(presenterModeActive);
+    } else if (presenterModeActive) {
+      loadWhiteboardScripts()
+        .then(() => {
+          if (window.umedPresenterWhiteboard) window.umedPresenterWhiteboard.setPresenterMode(presenterModeActive);
+        })
+        .catch(error => console.warn("The Presenter whiteboard could not be loaded.", error));
+    }
+  }
+
   function applyPresenterMode() {
     const presenterModeAction = presenterModeActive ? "Leave Presenter Mode" : "Enter Presenter Mode";
     document.body.classList.toggle("presenter-mode", presenterModeActive);
@@ -2165,7 +2232,7 @@
     elements.presenterModeToggle.setAttribute("aria-pressed", String(presenterModeActive));
     elements.presenterModeToggle.setAttribute("aria-label", presenterModeAction);
     elements.presenterModeToggle.title = presenterModeAction;
-    if (window.umedPresenterWhiteboard) window.umedPresenterWhiteboard.setPresenterMode(presenterModeActive);
+    syncWhiteboardMode();
     setSlideMenuExpanded(false);
     elements.results.hidden = true;
     resolveRoute();
@@ -2268,13 +2335,26 @@
       if (!event.ctrlKey && !event.metaKey) return;
       event.preventDefault();
       if (location.protocol !== "file:") return;
-      editorModeActive = !editorModeActive;
-      resolveRoute();
+      if (editorModeActive) {
+        editorModeActive = false;
+        resolveRoute();
+        return;
+      }
+      // The Editor scripts must exist before the Editor UI is built, so they load first.
+      loadEditorScripts()
+        .then(() => {
+          editorModeActive = true;
+          resolveRoute();
+        })
+        .catch(error => {
+          console.error(error);
+          alert(`Editor Mode could not be loaded: ${error.message}`);
+        });
     });
   }
 
   // Hook for editor/editor.js: it never touches routing or contentStore directly
-  // through this object, only through window.umedAppContent, so app.js stays the single source of
+  // through this object, only through window.umedAppContent, so main.js stays the single source of
   // truth for what is currently on screen.
   window.umedApp = {
     refreshSlide: () => { if (currentDraw) currentDraw(); },

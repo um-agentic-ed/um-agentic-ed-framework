@@ -2,7 +2,7 @@
   "use strict";
 
   // Standard way to attach a hover/focus tooltip to any element, styled via .has-tooltip
-  // in app.css. Reuse this instead of ad hoc title attributes or one-off tooltip markup.
+  // in framework.css. Reuse this instead of ad hoc title attributes or one-off tooltip markup.
   function attachTooltip(element, text) {
     if (!element) return;
     element.classList.add("has-tooltip");

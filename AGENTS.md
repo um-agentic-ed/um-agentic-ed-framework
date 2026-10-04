@@ -27,8 +27,8 @@ The app has three page states:
 - *Learner Mode* is the default state where Learners view and interact with 
   educational content, take notes on third-level Slides, and follow up using GPT. 
 - *Editor Mode* is toggled by Ctrl-click (Cmd-click on Mac) on the app title in 
-  the header, which activates list actions and an editing pane to the right of 
-  the content pane while leaving the current route unchanged.
+  the header, which activates list actions and an editing pane while leaving the 
+  current route unchanged.
   - List actions and inputs in the editing pane allow in-app content editing with 
     immediate live updates in the Editor's browser whenever possible.
   - Editors must give access to the root folder of their App's Parent repository 
@@ -48,7 +48,7 @@ The app has three page states:
   Access API `showDirectoryPicker()`.
 
 # App implementation
-- The app uses a static file implementation without a web server. 
+- The app mainly uses a static file implementation without a web server. 
 - Users open the app locally from `<app-target>.html` on their file system, i.e.,
   as `file:///<app-target>.html`.
 - Inputs and widgets are stateless between sessions, except for values stored
@@ -65,12 +65,13 @@ The app has three page states:
   adding them to the codebase:
   - Download third-party libraries using a pinned CDN when possible.
   - The following libraries are APPROVED: 
-    - Use Bootstrap 5.3 as the styling library.
     - Use Chart.js for all plots and charts in `widget` blocks.
     - Use Tabulator for all interactive data tables in `widget` blocks.
-    - Use Sortable.js for drag-and-drop list reordering in Editor mode (e.g.
-      the Slides menu's per-Level lists, and sidebar Category/Section lists).
-    - Use Fabric.js for the interactive whiteboard.
+    - Use Sortable.js for drag-and-drop list reordering, both in Editor mode (e.g.
+      the Slides menu's per-Level lists, and sidebar Category/Section lists) and
+      in widget blocks (e.g. "put these in order" exercises).
+    - Use Fabric.js for the interactive whiteboard; loaded when Presenter mode is 
+      first entered.
 
 Application code should remain shared, modular and generic, using a standardized 
 data structure for all content.
@@ -83,7 +84,7 @@ Educational content is structured in hierarchical levels:
 - A *Subject* defines one focus area in the context of the App.
 - A *Category* groups major content objectives within a Subject.
 - A *Section* groups educational topics within a Category.
-- A *Level* orders content by difficulty. Level identifiers use kebab-case:
+- A *Level* orders content by difficulty. 
     - *Foundations* (`foundations`) establish or refresh entry-level knowledge 
       required for consuming the target educational content.
     - *Core Learning* (`core-learning`) is the target educational content for 
@@ -104,9 +105,9 @@ Educational content is structured in hierarchical levels:
   - A Slide has a title and one or more Blocks.
 - A nested Subject, Category, Section, and Slide define the hierachical path to  
   one content unit in the App and its associated files. In contrast, Level is a 
-  Slide attribute used to organize and order Slide navigation within a Section, 
-  and all Block files and definitions are stored in the parent Slide's folder 
-  and description.
+  Slide attribute helps organize Slide navigation within a Section, and all 
+  Block files and definitions are stored in the parent Slide's folder and 
+  description.
 
 # App layout and styles
 
@@ -119,9 +120,7 @@ Hierarchical levels are reflected in the app:
 - Subjects are shown on the App landing Slide and switched via a popup menu in the 
   header, to the right of the app title. In Editor Mode that menu works like the 
   Slides menu: hover "+" buttons between and around Subjects add a new Subject, 
-  and dragging reorders them. The Delete button on a landing Slide only enables 
-  for an empty Subject, Category or Section. The sidebar shows the Categories of the 
-  current Subject, which stays selected on the App landing and error Slides.
+  and dragging reorders them. 
 - The sidebar has:
     - A top-level entry for each Category in a Subject. Category Section 
       visibility is exclusive; inactive Categories are collapsed.
@@ -130,9 +129,9 @@ Hierarchical levels are reflected in the app:
 - One Slide occupies the content pane at a time (and the editor pane in Editor mode).
 
 App developers may brand their app in two ways:
-- color selections for the header and sidebar declared in the `app.css` file 
-  found in the parent root (see [App identity and branding](#app-identity-and-branding))
-- images or other content included on Slides
+- Color selections for the header and sidebar declared in the `app.css` file 
+  found in the parent root (see [App identity and branding](#app-identity-and-branding)).
+- Images or other content included on Slides.
 
 ## App identity and branding
 
@@ -160,8 +159,8 @@ once when creating an App, by hand or with the `set-app-identity` skill:
   defaults: `--umed-brand-bg`, `--umed-brand-text`, `--umed-brand-hover-bg`, 
   `--umed-brand-border` and `--umed-brand-accent`. 
 
-The HTML entrypoint loads the Framework stylesheet before `app.css`, and `app.js`
-before any Framework script.
+The HTML entrypoint loads the Framework stylesheet (`framework.css`) before the
+Parent `app.css`, and the Parent `app.js` before any Framework script.
 
 # Routing
 - The hierarchical path to the current content is reflected in the visible URL.
@@ -189,7 +188,7 @@ before any Framework script.
   should be split at whitespace and hyphens when extracting candidate keywords. 
   All punctuation should be removed from the outsides of words, but not when it 
   appears within a candidate keyword; thus, "Height, and Width!" becomes keywords 
-  "height" and "width", but "A(B)C and XYZ:123" would become keywords "a(b)c" and 
+  "height" and "width", but "A(B)C and XYZ:123" become keywords "a(b)c" and 
   "xyz:123". Slide text is defined as any word the Learner would see in the 
   content pane, but does not include any code elements used to generate that 
   visible text or GPT prompts. Thus:
@@ -282,8 +281,8 @@ repository that wraps this instance of the `um-agentic-ed-framework` repository.
 
 ```text
 /src/
-  um-agentic-ed-framework/  A Submodule clone of this `um-agentic-ed-framework` repository
   content/                  Files that define the App-specific educational content
+  um-agentic-ed-framework/  A Submodule clone of this `um-agentic-ed-framework` repository
 ```
 
 ## `/src/um-agentic-ed-framework/` file tree
@@ -291,11 +290,20 @@ repository that wraps this instance of the `um-agentic-ed-framework` repository.
 ```text
 /src/um-agentic-ed-framework/
   AGENTS.md    This file
-  app/         Application bootstrap and global state
-  components/  Shared UI components
+  app/         main.js: application bootstrap, routing, rendering and global state
+  components/  Shared UI components and services
   editor/      Files that support Editor mode
-  styles/      Application styles
+  styles/      framework.css: the Framework stylesheet, in numbered sections
 ```
+
+Script loading: `index.html` loads the Framework scripts the Learner view needs
+(components and `app/main.js`). Editor mode and the Presenter whiteboard are used
+only occasionally, so `main.js` loads them on first use instead:
+- Turning on Editor mode (Ctrl-click on the app title) loads `editor/file-access.js` 
+  and `editor/editor.js`.
+- Entering Presenter mode loads Fabric.js and `components/presenter-whiteboard.js`.
+New Framework code that is only needed in one of these modes should be loaded the 
+same way, not added to `index.html`.
 
 ## `/src/content/` file tree
 
@@ -308,7 +316,7 @@ repository that wraps this instance of the `um-agentic-ed-framework` repository.
     images/                Image asset files
   <subject>/               Folder for a first-level Subject in the header popup
     subject.js             Landing slide shown to introduce a Subject
-    <subject>/<category>/            Folder for a second-level Category in the sidebar navigator
+    <category>/            Folder for a second-level Category in the sidebar navigator
       category.js          Landing slide shown to introduce a Category
       <section>/           Folder for a nested third-level Section in the sidebar navigator
         AGENTS.md          Content generation instructions that apply to all Section Slides 
@@ -462,9 +470,9 @@ type-specific fields:
 
 # Content index file format and behavior
 
-`content-index.js` is the single manifest of all Subject, Category, Section, and Slide
-metadata. It allows the app to build the sidebar, validate routes, and search
-content without loading every `slide.js` file, preserving load efficiency.
+`content-index.js` is the single manifest of all Subject, Category, Section, and 
+Slide metadata. It allows the app to build the sidebar, validate routes, and 
+search content without loading every `slide.js` file, preserving load efficiency.
 
 ## Loading and structure
 - Loaded once via `<script src="/src/content/content-index.js">`, which
@@ -571,9 +579,9 @@ window.umedAppContentIndex = {
 
 # Learner note taking
 
-To facilitate active learning a notepad can be opened in Learner mode where users
-can record notes on third-level Slides. The notepad is not offered on App, 
-Category, or Section landing Slides. Notes are cached in memory for immediate 
+To facilitate active learning a textarea notepad can be opened in Learner mode 
+where users can record notes about Slides. The notepad is not offered on App, 
+Subject, Category, or Section landing Slides. Notes are cached in memory for immediate 
 interaction and saved automatically to IndexedDB using the immutable App and Slide 
 UUIDs, so they persist across browser sessions without modifying content files. 
 Learners may export an unencrypted `<appName>.notes.json` archival/shareable copy. 
@@ -648,9 +656,11 @@ When generating content for a Section, you should:
   file:
   - **Chart.js** for all plots and charts.
   - **Tabulator** for all interactive data tables.
-  - Agents must not introduce alternative plotting or table libraries. If
-    neither library can reasonably support a requested widget, ask the Editor
-    before adding a new one (see Code standards).
+  - **Sortable.js** for drag-and-drop ordering of list items, e.g., in
+    put these in order exercises.
+  - Agents must not introduce alternative plotting, table or drag-and-drop
+    libraries. If these libraries cannot reasonably support a requested widget, 
+    ask the Editor before adding a new one (see Code standards).
 - Widget host contract: every `<widget>.js` file assigns a factory to
   `window.umedAppWidgets['<subject>/<category>/<section>/<slide>/<widget-name>']` with an
   `init(container)` method that builds the Chart.js/Tabulator instance (and any
@@ -746,11 +756,12 @@ When generating content for a Section, you should:
 
 # Security requirements
 - Never place protected health information (PHI), credentials, copyrighted 
-  downloads, or secrets in committed repository files, browser storage, URLs, or application logs.
+  downloads, or secrets in committed repository files, browser storage, URLs, or 
+  application logs.
 - Screen all repository files for disallowed secure content as listed above prior
   to commit or push.
-- Ensure that user actions beyond your control that might lead to leaking of 
-  secure information communicate an appropriate caution in a user-facing dialog 
-  before the action is executed in Javascript.
+- Ensure that user actions with content beyond your control that might lead to 
+  leaking of secure information communicate an appropriate caution in a 
+  user-facing dialog before the action is executed in Javascript.
 - URL query parameters are visible in browser history, bookmarks, referrers, and
   server logs.

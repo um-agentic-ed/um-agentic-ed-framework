@@ -53,7 +53,7 @@
     document.head.append(script);
   }
 
-  // Tears down every widget mounted in the Slide currently on screen; app.js calls this right
+  // Tears down every widget mounted in the Slide currently on screen; main.js calls this right
   // before it clears the content pane so Chart.js/Tabulator instances never leak.
   function destroyAll() {
     activeWidgets.forEach(destroy => {
