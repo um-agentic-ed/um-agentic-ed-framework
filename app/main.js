@@ -9,7 +9,7 @@
 
   // Editor Mode and the Presenter whiteboard are only needed occasionally, so their scripts (and
   // the Fabric.js library the whiteboard uses) are loaded on first use instead of at page load. Framework files are located relative to this script so hosting paths do not matter.
-  const FRAMEWORK_URL = document.currentScript
+  const FRAMEWORK_URL = document.currentScript && document.currentScript.src
     ? new URL("../", document.currentScript.src).href
     : new URL("src/um-agentic-ed-framework/", document.baseURI).href;
   const FABRIC_URL = "https://cdn.jsdelivr.net/npm/fabric@5.3.0/dist/fabric.min.js";
@@ -48,7 +48,8 @@
         loadFabricScript(),
         loadScript(`${FRAMEWORK_URL}editor/file-access.js`),
         loadScript(`${FRAMEWORK_URL}editor/image-editor.js`),
-        loadScript(`${FRAMEWORK_URL}editor/editor.js`)
+        loadScript(`${FRAMEWORK_URL}editor/editor.js`),
+        loadScript(`${FRAMEWORK_URL}editor/single-file-export.js`)
       ]).catch(error => {
         editorScriptsPromise = null;
         throw error;
@@ -94,6 +95,7 @@
     presenterFontIncrease: document.getElementById("presenter-font-increase"),
     presenterModeToggle: document.getElementById("presenter-mode-toggle"),
     editorRefresh: document.getElementById("editor-refresh"),
+    appExport: document.getElementById("app-export"),
     editor: document.getElementById("editor-pane"),
     notepad: document.getElementById("learner-notepad"),
     notepadClose: document.getElementById("learner-notepad-close"),
@@ -244,7 +246,11 @@
   let activeSectionId = null;
 
   const isEditorUiActive = () => editorModeActive && !presenterModeActive;
-  const cacheBustedLocalSrc = (src) => contentReloadToken ? `${src}?reload=${contentReloadToken}` : src;
+  const cacheBustedLocalSrc = (src) => {
+    const embedded = window.umedEmbeddedAssets && window.umedEmbeddedAssets[src];
+    if (embedded) return embedded;
+    return contentReloadToken ? `${src}?reload=${contentReloadToken}` : src;
+  };
 
   function createUuid() {
     if (!window.crypto || typeof window.crypto.randomUUID !== "function") {
@@ -1215,6 +1221,7 @@
     if (editorModeActive || presenterModeActive) setNotepadOpen(false);
     elements.editor.hidden = !isEditorUiActive();
     elements.editorRefresh.hidden = !isEditorUiActive();
+    if (elements.appExport) elements.appExport.hidden = !isEditorUiActive();
 
     const parts = decodeURIComponent(location.hash.replace(/^#\/?/, "")).split("/").filter(Boolean);
     elements.education.hidden = false;
@@ -1681,7 +1688,7 @@
       elements.levels.append(button);
     });
 
-    if (!editorModeActive && !presenterModeActive) {
+    if (!editorModeActive && !presenterModeActive && !window.umedSingleFileExport) {
       const notesButton = document.createElement("button");
       notesButton.type = "button";
       notesButton.className = "notepad-button";
@@ -2122,7 +2129,9 @@
       if (block.center) wrapper.classList.add("block--centered");
       fileNames.forEach((fileName, index) => {
         const image = document.createElement("img");
-        image.src = cacheBustedLocalSrc(`${imageBasePath}/${fileName}`);
+        image.src = /^(?:https?:|data:|blob:)/i.test(fileName)
+          ? fileName
+          : cacheBustedLocalSrc(`${imageBasePath}/${fileName}`);
         image.alt = block.alt || "";
         image.style.maxWidth = resolveCssMaxWidth(maxWidths.length === 1 ? maxWidths[0] : maxWidths[index], DEFAULT_IMAGE_MAX_WIDTH);
         wrapper.append(image);
@@ -2464,6 +2473,7 @@
   elements.presenterFontIncrease.innerHTML = (window.umedIcons && window.umedIcons.add) || "+";
   elements.presenterModeToggle.innerHTML = (window.umedIcons && window.umedIcons.presenter) || "\u25b6";
   elements.editorRefresh.innerHTML = (window.umedIcons && window.umedIcons.refresh) || "\u21bb";
+  if (elements.appExport) elements.appExport.innerHTML = (window.umedIcons && window.umedIcons.export) || "\u2193";
 
   function reloadContentIndex() {
     return new Promise((resolve, reject) => {
@@ -2511,6 +2521,12 @@
   }
 
   elements.editorRefresh.addEventListener("click", refreshContentFromDisk);
+  if (elements.appExport) {
+    elements.appExport.addEventListener("click", () => {
+      if (!window.umedSingleFileExporter) return;
+      window.umedSingleFileExporter.exportApp(elements.appExport);
+    });
+  }
 
   function applyPresenterFontSize() {
     elements.slide.style.fontSize = presenterModeActive ? `${presenterFontPercent}%` : "";
@@ -2659,6 +2675,10 @@
   const titleLink = document.querySelector(".app-title");
   if (titleLink) {
     titleLink.addEventListener("click", event => {
+      if (window.umedSingleFileExport) {
+        if (event.ctrlKey || event.metaKey) event.preventDefault();
+        return;
+      }
       if (!event.ctrlKey && !event.metaKey) return;
       event.preventDefault();
       if (location.protocol !== "file:") return;

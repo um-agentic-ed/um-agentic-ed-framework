@@ -7,6 +7,7 @@
   // Editor can only write inside the App's content.
   const CONTENT_ROOT_LABEL = window.umedContentRoot;
   let rootHandlePromise = null;
+  let appRootHandle = null;
   let mutationQueue = Promise.resolve();
 
   // Chrome can reject a File System Access operation when a synced folder (notably Dropbox)
@@ -52,10 +53,10 @@
   async function pickContentRoot() {
     const explainAndProceed = window.umedComponents && window.umedComponents.confirm
       ? window.umedComponents.confirm(
-          `Saving needs one-time access to this App's project folder. In the next dialog, ` +
+          `Editing or exporting needs one-time access to this App's project folder. In the next dialog, ` +
           `browse to your local copy of this App and select its root folder (the one that contains ` +
           `"app.js", "index.html" and "src"), then choose it. Changes are only written inside ` +
-          `its "${CONTENT_ROOT_LABEL}" folder.`,
+          `its "${CONTENT_ROOT_LABEL}" folder when you save edits.`,
           { confirmLabel: "Choose folder\u2026", cancelLabel: "Cancel" }
         )
       : Promise.resolve(true);
@@ -99,6 +100,7 @@
         if (!useAnyway) return pickContentRoot();
       }
     }
+    appRootHandle = rootFolderHandle;
     return contentHandle;
   }
   async function getContentRootHandle() {
@@ -277,6 +279,10 @@
 
   window.umedEditorFS = {
     getContentRootHandle,
+    getAppRootHandle: async () => {
+      const contentHandle = await getContentRootHandle();
+      return contentHandle ? appRootHandle : null;
+    },
     writeTextFile: (...args) => enqueueMutation(() => writeFile(...args)),
     writeBinaryFile: (...args) => enqueueMutation(() => writeFile(...args)),
     getExistingFile,
