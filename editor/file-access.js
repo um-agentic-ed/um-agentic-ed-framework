@@ -7,6 +7,28 @@
   // Editor can only write inside the App's content.
   const CONTENT_ROOT_LABEL = window.umedContentRoot;
   let rootHandlePromise = null;
+  let mutationQueue = Promise.resolve();
+
+  // Chrome can reject a File System Access operation when a synced folder (notably Dropbox)
+  // changes the file between resolving its handle and opening the writable stream. The failure
+  // is transient, but retrying the same FileSystemFileHandle is not: resolve the complete path
+  // again on every attempt so Chromium reads the current filesystem state.
+  function isStaleInterfaceStateError(error) {
+    return Boolean(error && /state cached in an interface object.*changed since it was read from disk/i.test(error.message || ""));
+  }
+
+  function retryDelay(attempt) {
+    return new Promise(resolve => setTimeout(resolve, 50 * (attempt + 1)));
+  }
+
+  // All mutations share one queue. Several Editor workflows update content-index.js in addition
+  // to their primary file, and without coordination two otherwise valid UI actions can overlap
+  // those writes and invalidate one another's browser-side filesystem state.
+  function enqueueMutation(operation) {
+    const result = mutationQueue.then(operation, operation);
+    mutationQueue = result.catch(() => {});
+    return result;
+  }
 
   async function getSubdirectory(parentHandle, name) {
     try {
@@ -99,16 +121,25 @@
   // Generic write shared by text (slide.js/content-index.js serialization) and binary (uploaded
   // image) saves: FileSystemWritableFileStream.write() accepts a string, BufferSource, or Blob.
   async function writeFile(rootHandle, relativePath, content) {
-    const segments = relativePath.split("/");
-    const fileName = segments.pop();
-    let dirHandle = rootHandle;
-    for (const segment of segments) {
-      dirHandle = await dirHandle.getDirectoryHandle(segment, { create: true });
+    const maxAttempts = 3;
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      try {
+        const segments = relativePath.split("/");
+        const fileName = segments.pop();
+        let dirHandle = rootHandle;
+        for (const segment of segments) {
+          dirHandle = await dirHandle.getDirectoryHandle(segment, { create: true });
+        }
+        const fileHandle = await dirHandle.getFileHandle(fileName, { create: true });
+        const writable = await fileHandle.createWritable();
+        await writable.write(content);
+        await writable.close();
+        return;
+      } catch (error) {
+        if (!isStaleInterfaceStateError(error) || attempt === maxAttempts - 1) throw error;
+        await retryDelay(attempt);
+      }
     }
-    const fileHandle = await dirHandle.getFileHandle(fileName, { create: true });
-    const writable = await fileHandle.createWritable();
-    await writable.write(content);
-    await writable.close();
   }
 
   // Looks up a file that may already exist at relativePath (e.g. to check for an upload name
@@ -246,14 +277,14 @@
 
   window.umedEditorFS = {
     getContentRootHandle,
-    writeTextFile: writeFile,
-    writeBinaryFile: writeFile,
+    writeTextFile: (...args) => enqueueMutation(() => writeFile(...args)),
+    writeBinaryFile: (...args) => enqueueMutation(() => writeFile(...args)),
     getExistingFile,
     listFiles,
-    moveFile,
-    deleteFile,
-    deleteDirectory,
-    copyDirectory,
-    replaceTextInJavaScriptFiles
+    moveFile: (...args) => enqueueMutation(() => moveFile(...args)),
+    deleteFile: (...args) => enqueueMutation(() => deleteFile(...args)),
+    deleteDirectory: (...args) => enqueueMutation(() => deleteDirectory(...args)),
+    copyDirectory: (...args) => enqueueMutation(() => copyDirectory(...args)),
+    replaceTextInJavaScriptFiles: (...args) => enqueueMutation(() => replaceTextInJavaScriptFiles(...args))
   };
 })();

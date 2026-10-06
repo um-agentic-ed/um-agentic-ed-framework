@@ -15,6 +15,9 @@
   let refreshTimer = null;
   let current = null; // { key, kind, assetBasePath, src } from main.js's umed:slide-loaded event
   const dirtyKeys = new Set(); // keys with unsaved in-memory edits, tracked across navigation
+  // Retains file metadata for previously visited pages so a modified Save click can persist
+  // dirty Slides that are no longer the page currently shown in the Editor pane.
+  const contentInfoByKey = new Map();
   // Deep clones of each key's last-saved (or first-seen-this-session) content, used to revert
   // in-memory edits when Discard Changes is clicked. Refreshed after every successful save and
   // dropped on delete; otherwise left alone so navigating away and back doesn't reset the baseline.
@@ -713,6 +716,11 @@
       imageFileNames(block).forEach((fileName, index) => {
         const row = document.createElement("div");
         row.className = "editor-image-file-row";
+        const handle = document.createElement("span");
+        handle.className = "editor-image-file-handle";
+        handle.textContent = DRAG_HANDLE_GLYPH;
+        handle.title = `Reorder ${fileName}`;
+        handle.setAttribute("aria-hidden", "true");
         const name = document.createElement("input");
         name.type = "text";
         name.readOnly = true;
@@ -734,10 +742,27 @@
         removeButton.title = `Remove ${fileName} from this image block`;
         removeButton.setAttribute("aria-label", `Remove image ${fileName}`);
         removeButton.addEventListener("click", () => removeImageFile(fileName, block, rerenderImages));
-        row.append(name, editButton, removeButton);
+        row.append(handle, name, editButton, removeButton);
         list.append(row);
       });
     }
+
+    Sortable.create(list, {
+      handle: ".editor-image-file-handle",
+      animation: 150,
+      ghostClass: "editor-image-file-row--ghost",
+      chosenClass: "editor-image-file-row--chosen",
+      dragClass: "editor-image-file-row--drag",
+      onEnd(event) {
+        if (event.oldIndex === event.newIndex) return;
+        const names = imageFileNames(block);
+        const [moved] = names.splice(event.oldIndex, 1);
+        names.splice(event.newIndex, 0, moved);
+        setImageFileNames(block, names);
+        rerenderImages();
+        scheduleRefresh();
+      }
+    });
 
     const uploadInput = document.createElement("input");
     uploadInput.type = "file";
@@ -1484,8 +1509,11 @@
     saveButton.type = "button";
     saveButton.className = "save-button";
     saveButton.textContent = "Save Changes";
+    if (info.kind === "slide") {
+      saveButton.title = "Ctrl-click (Cmd-click on Mac) to save pending changes on all Slides";
+    }
     saveButton.disabled = !dirtyKeys.has(info.key);
-    saveButton.addEventListener("click", () => handleSave(info, saveButton));
+    saveButton.addEventListener("click", event => handleSave(info, saveButton, event.ctrlKey || event.metaKey));
     toolbar.append(saveButton);
     currentSaveButton = saveButton;
 
@@ -1708,34 +1736,58 @@
     await writeIndexFile(rootHandle);
   }
 
-  async function handleSave(info, button) {
+  async function persistContent(rootHandle, info) {
     const data = window.umedAppContent[info.key];
-    if (!data || !window.umedEditorFS) return;
+    if (!data) throw new Error(`Content is unavailable for ${info.key}.`);
+
+    const savedData = savedSnapshots.get(info.key);
+    if (info.kind === "slide" && (!savedData || learnerFacingSignature(savedData) !== learnerFacingSignature(data))) {
+      data.contentUpdatedAt = new Date().toISOString();
+    }
+
+    const relativePath = contentRelativePath(info.src);
+    await window.umedEditorFS.writeTextFile(rootHandle, relativePath, serializeContentFile(info, data));
+
+    syncIndexEntry(info.key, data, info.kind);
+    if (info.kind === "slide" || info.kind === "overview") await writeIndexFile(rootHandle);
+
+    dirtyKeys.delete(info.key);
+    const savedSnapshot = JSON.parse(JSON.stringify(data));
+    savedSnapshots.set(info.key, savedSnapshot);
+    mapSavedBlockCounterparts(data, savedSnapshot, true);
+  }
+
+  async function handleSave(info, button, saveAllSlides = false) {
+    if (!window.umedEditorFS) return;
+    const infos = saveAllSlides && info.kind === "slide"
+      ? [...dirtyKeys]
+        .map(key => contentInfoByKey.get(key))
+        .filter(candidate => candidate && candidate.kind === "slide")
+      : [info];
+    if (!infos.length) return;
+
     const originalLabel = button.textContent;
     button.disabled = true;
-    button.textContent = "Saving\u2026";
+    button.textContent = infos.length > 1 ? `Saving ${infos.length} Slides\u2026` : "Saving\u2026";
     try {
       const rootHandle = await window.umedEditorFS.getContentRootHandle();
       if (!rootHandle) return; // Editor cancelled the folder prompt; leave changes pending.
 
-      const savedData = savedSnapshots.get(info.key);
-      if (info.kind === "slide" && (!savedData || learnerFacingSignature(savedData) !== learnerFacingSignature(data))) {
-        data.contentUpdatedAt = new Date().toISOString();
+      const failures = [];
+      for (const candidate of infos) {
+        try {
+          await persistContent(rootHandle, candidate);
+        } catch (error) {
+          console.error(error);
+          failures.push(`${candidate.key}: ${error.message}`);
+        }
       }
-
-      const relativePath = contentRelativePath(info.src);
-      await window.umedEditorFS.writeTextFile(rootHandle, relativePath, serializeContentFile(info, data));
-
-      syncIndexEntry(info.key, data, info.kind);
-      if (info.kind === "slide" || info.kind === "overview") await writeIndexFile(rootHandle);
       if (window.umedApp && typeof window.umedApp.refreshNavigation === "function") {
         window.umedApp.refreshNavigation();
       }
-
-      dirtyKeys.delete(info.key);
-      const savedSnapshot = JSON.parse(JSON.stringify(data));
-      savedSnapshots.set(info.key, savedSnapshot);
-      mapSavedBlockCounterparts(data, savedSnapshot, true);
+      if (failures.length) {
+        alert(`Could not save changes to ${failures.length} Slide${failures.length === 1 ? "" : "s"}:\n\n${failures.join("\n")}`);
+      }
     } catch (error) {
       console.error(error);
       alert(`Could not save changes: ${error.message}`);
@@ -1881,6 +1933,7 @@
 
   window.addEventListener("umed:slide-loaded", event => {
     current = event.detail;
+    contentInfoByKey.set(current.key, current);
     refreshIfActive();
   });
 
@@ -1891,6 +1944,7 @@
 
   if (window.umedApp && typeof window.umedApp.getCurrentSlideInfo === "function") {
     current = window.umedApp.getCurrentSlideInfo();
+    if (current) contentInfoByKey.set(current.key, current);
     refreshIfActive();
   }
 })();
