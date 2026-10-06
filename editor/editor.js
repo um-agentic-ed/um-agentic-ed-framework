@@ -19,6 +19,10 @@
   // in-memory edits when Discard Changes is clicked. Refreshed after every successful save and
   // dropped on delete; otherwise left alone so navigating away and back doesn't reset the baseline.
   const savedSnapshots = new Map();
+  // Live block objects can be reordered without changing identity. Remember their corresponding
+  // blocks in the last-saved snapshot so an image edit can persist only its filename declaration
+  // without accidentally saving unrelated live form edits.
+  const savedBlockCounterparts = new WeakMap();
   let currentSaveButton = null;
   let currentDiscardButton = null;
 
@@ -459,6 +463,76 @@
     if (Object.prototype.hasOwnProperty.call(block, "src")) delete block.src;
   }
 
+  function mapSavedBlockCounterparts(data, snapshot, force = false) {
+    const liveBlocks = (data.content && data.content.blocks) || [];
+    const savedBlocks = (snapshot.content && snapshot.content.blocks) || [];
+    liveBlocks.forEach((block, index) => {
+      if ((force || !savedBlockCounterparts.has(block)) && savedBlocks[index]) savedBlockCounterparts.set(block, savedBlocks[index]);
+    });
+  }
+
+  function replaceImageFileName(block, oldFileName, newFileName) {
+    const names = imageFileNames(block);
+    const replaced = names.map(name => name === oldFileName ? newFileName : name);
+    if (!names.includes(oldFileName) && !replaced.includes(newFileName)) replaced.push(newFileName);
+    setImageFileNames(block, replaced);
+  }
+
+  // Image pixels and their filename declaration form one filesystem transaction from the
+  // Editor's perspective. Persist just that declaration against the last-saved content snapshot;
+  // other dirty form fields remain pending for the normal Save Changes workflow.
+  async function persistEditedImageReference(rootHandle, info, block, oldFileName, newFileName) {
+    const data = window.umedAppContent[info.key];
+    const snapshot = savedSnapshots.get(info.key);
+    if (!data || !snapshot) throw new Error("The saved content baseline is unavailable.");
+
+    const savedBlocks = (snapshot.content && snapshot.content.blocks) || [];
+    const savedBlock = savedBlockCounterparts.get(block);
+    const savedIndex = savedBlock ? savedBlocks.indexOf(savedBlock) : -1;
+    const candidate = JSON.parse(JSON.stringify(snapshot));
+    candidate.content = candidate.content || {};
+    candidate.content.blocks = candidate.content.blocks || [];
+
+    let candidateBlock;
+    if (savedIndex >= 0) {
+      candidateBlock = candidate.content.blocks[savedIndex];
+      replaceImageFileName(candidateBlock, oldFileName, newFileName);
+    } else {
+      const liveIndex = ((data.content && data.content.blocks) || []).indexOf(block);
+      candidateBlock = JSON.parse(JSON.stringify(block));
+      candidate.content.blocks.splice(Math.max(0, liveIndex), 0, candidateBlock);
+    }
+
+    const updatedAt = new Date().toISOString();
+    if (info.kind === "slide") candidate.contentUpdatedAt = updatedAt;
+    await window.umedEditorFS.writeTextFile(
+      rootHandle,
+      contentRelativePath(info.src),
+      serializeContentFile(info, candidate)
+    );
+
+    snapshot.content = snapshot.content || {};
+    snapshot.content.blocks = snapshot.content.blocks || [];
+    let persistedBlock;
+    if (savedIndex >= 0) {
+      persistedBlock = snapshot.content.blocks[savedIndex];
+      replaceImageFileName(persistedBlock, oldFileName, newFileName);
+    } else {
+      const liveIndex = ((data.content && data.content.blocks) || []).indexOf(block);
+      persistedBlock = JSON.parse(JSON.stringify(block));
+      snapshot.content.blocks.splice(Math.max(0, liveIndex), 0, persistedBlock);
+    }
+    if (info.kind === "slide") {
+      snapshot.contentUpdatedAt = updatedAt;
+      data.contentUpdatedAt = updatedAt;
+    }
+    savedBlockCounterparts.set(block, persistedBlock);
+
+    if (JSON.stringify(data) === JSON.stringify(snapshot)) dirtyKeys.delete(info.key);
+    else dirtyKeys.add(info.key);
+    if (current && current.key === info.key) updateSaveButtonState();
+  }
+
   function imageRelativePath(block, fileName) {
     const relativeDir = imageRelativeDir(block);
     return relativeDir ? `${relativeDir}/${fileName}` : fileName;
@@ -467,6 +541,54 @@
   function imageUnusedPath(block, fileName) {
     const relativeDir = imageRelativeDir(block);
     return relativeDir ? `${relativeDir}/_unused/${fileName}` : `_unused/${fileName}`;
+  }
+
+  function imageVersionLineage(fileName) {
+    const dot = fileName.lastIndexOf(".");
+    const extension = dot >= 0 ? fileName.slice(dot + 1).toLowerCase() : "";
+    const stem = dot >= 0 ? fileName.slice(0, dot) : fileName;
+    const match = stem.match(/^(.*)_v\d+$/i);
+    return { base: (match ? match[1] : stem).toLowerCase(), extension };
+  }
+
+  function sameImageVersionLineage(first, second) {
+    const a = imageVersionLineage(first);
+    const b = imageVersionLineage(second);
+    return a.base === b.base && a.extension === b.extension;
+  }
+
+  async function editImageFile(fileName, block, rerenderImages) {
+    if (!window.umedImageEditor || !window.umedEditorFS) {
+      alert("Image editing tools are unavailable.");
+      return;
+    }
+    const info = current;
+    if (!info) return;
+    const rootHandle = await window.umedEditorFS.getContentRootHandle();
+    if (!rootHandle) return;
+    let newFileName = null;
+    try {
+      newFileName = await window.umedImageEditor.open({
+        rootHandle,
+        relativeDir: imageRelativeDir(block),
+        fileName
+      });
+      if (!newFileName) return;
+      replaceImageFileName(block, fileName, newFileName);
+      await persistEditedImageReference(rootHandle, info, block, fileName, newFileName);
+      rerenderImages();
+      if (window.umedApp && typeof window.umedApp.refreshSlide === "function") window.umedApp.refreshSlide();
+    } catch (error) {
+      console.error(error);
+      // The bitmap editor may already have completed its versioned file write before the content
+      // declaration write failed. Keep the live filename dirty so Save Changes remains a recovery
+      // path instead of silently reverting the UI to the now-archived source filename.
+      if (newFileName) scheduleRefresh();
+      alert(newFileName
+        ? `The edited image was saved as "${newFileName}", but its Slide declaration could not be saved. ` +
+          `Use Save Changes to retry recording the new filename.\n\n${error.message}`
+        : `Could not edit image "${fileName}": ${error.message}`);
+    }
   }
 
   async function removeImageFile(fileName, block, rerenderImages) {
@@ -513,8 +635,21 @@
         alert(`An image named "${fileName}" already exists in this location.`);
         return;
       }
+      const currentNames = imageFileNames(block);
+      const supersededNames = currentNames.filter(name => sameImageVersionLineage(name, fileName));
+      for (const supersededName of supersededNames) {
+        const unusedPath = imageUnusedPath(block, supersededName);
+        if (await window.umedEditorFS.getExistingFile(rootHandle, unusedPath)) {
+          alert(`Cannot restore "${fileName}" because _unused already contains "${supersededName}".`);
+          return;
+        }
+      }
+      for (const supersededName of supersededNames) {
+        await window.umedEditorFS.moveFile(rootHandle, imageRelativePath(block, supersededName), imageUnusedPath(block, supersededName));
+      }
       await window.umedEditorFS.moveFile(rootHandle, imageUnusedPath(block, fileName), activePath);
-      if (!imageFileNames(block).includes(fileName)) setImageFileNames(block, [...imageFileNames(block), fileName]);
+      const retainedNames = currentNames.filter(name => !sameImageVersionLineage(name, fileName));
+      setImageFileNames(block, [...retainedNames, fileName]);
       rerenderImages();
       scheduleRefresh();
     } catch (error) {
@@ -583,6 +718,15 @@
         name.readOnly = true;
         name.value = fileName;
         name.setAttribute("aria-label", `Image ${index + 1} file name`);
+        const extension = fileName.split(".").pop().toLowerCase();
+        const editButton = document.createElement("button");
+        editButton.type = "button";
+        editButton.className = "editor-image-file-edit";
+        editButton.innerHTML = (window.umedIcons && window.umedIcons.edit) || "Edit";
+        editButton.title = `Edit ${fileName}`;
+        editButton.setAttribute("aria-label", `Edit image ${fileName}`);
+        editButton.hidden = !["jpg", "jpeg", "png", "webp"].includes(extension);
+        editButton.addEventListener("click", () => editImageFile(fileName, block, rerenderImages));
         const removeButton = document.createElement("button");
         removeButton.type = "button";
         removeButton.className = "editor-image-file-remove";
@@ -590,7 +734,7 @@
         removeButton.title = `Remove ${fileName} from this image block`;
         removeButton.setAttribute("aria-label", `Remove image ${fileName}`);
         removeButton.addEventListener("click", () => removeImageFile(fileName, block, rerenderImages));
-        row.append(name, removeButton);
+        row.append(name, editButton, removeButton);
         list.append(row);
       });
     }
@@ -1320,7 +1464,12 @@
     deleteButton.addEventListener("click", () => handleDelete(info, deleteButton, deleteKind));
     toolbar.append(deleteButton);
 
-    if (!savedSnapshots.has(info.key)) savedSnapshots.set(info.key, JSON.parse(JSON.stringify(data)));
+    const createdSnapshot = !savedSnapshots.has(info.key);
+    if (createdSnapshot) savedSnapshots.set(info.key, JSON.parse(JSON.stringify(data)));
+    // While content is dirty, newly added blocks deliberately have no saved counterpart. Do not
+    // infer one by array position after navigation, because an unsaved insertion or reorder may
+    // have shifted every later index.
+    if (createdSnapshot || !dirtyKeys.has(info.key)) mapSavedBlockCounterparts(data, savedSnapshots.get(info.key));
 
     const discardButton = document.createElement("button");
     discardButton.type = "button";
@@ -1584,7 +1733,9 @@
       }
 
       dirtyKeys.delete(info.key);
-      savedSnapshots.set(info.key, JSON.parse(JSON.stringify(data)));
+      const savedSnapshot = JSON.parse(JSON.stringify(data));
+      savedSnapshots.set(info.key, savedSnapshot);
+      mapSavedBlockCounterparts(data, savedSnapshot, true);
     } catch (error) {
       console.error(error);
       alert(`Could not save changes: ${error.message}`);

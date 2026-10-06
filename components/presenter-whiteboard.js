@@ -8,6 +8,7 @@
   const unavailable = document.getElementById("whiteboard-unavailable");
   const colorPickers = Array.from(document.querySelectorAll("[data-whiteboard-color-target]"));
   const stackToggleButton = document.getElementById("whiteboard-stack-toggle");
+  const rotateButton = document.getElementById("whiteboard-rotate");
   const deleteButton = document.getElementById("whiteboard-delete");
   const undoButton = document.getElementById("whiteboard-undo");
   const clearButton = document.getElementById("whiteboard-clear");
@@ -43,6 +44,7 @@
     button.innerHTML = icons[tool] || tool;
   });
   stackToggleButton.innerHTML = icons.stackToggle || "Layers";
+  rotateButton.innerHTML = icons.rotate || "Rotate";
   deleteButton.innerHTML = icons.delete || "Delete";
   undoButton.innerHTML = icons.undo || "Undo";
   clearButton.innerHTML = icons.clear || "Clear";
@@ -60,6 +62,7 @@
     if (!canvas) {
       fitButton.disabled = true;
       stackToggleButton.disabled = true;
+      rotateButton.disabled = true;
       deleteButton.disabled = true;
       undoButton.disabled = true;
       clearButton.disabled = true;
@@ -68,6 +71,7 @@
     const hasSelection = canvas.getActiveObjects().length > 0;
     fitButton.disabled = !fitted && canvas.getObjects().length === 0;
     stackToggleButton.disabled = editingDisabled || !hasSelection;
+    rotateButton.disabled = editingDisabled || !hasSelection;
     deleteButton.disabled = editingDisabled || !hasSelection;
     const stackAction = selectionIsAtFront() ? "Send selection to back" : "Bring selection to front";
     stackToggleButton.setAttribute("aria-label", stackAction);
@@ -180,6 +184,55 @@
       item.querySelector(".whiteboard-color-popup").hidden = !expanded;
       item.querySelector(".whiteboard-color-toggle").setAttribute("aria-expanded", String(expanded));
     });
+  }
+
+  function isArrowGroup(object) {
+    if (!object || object.type !== "group" || typeof object.getObjects !== "function") return false;
+    const children = object.getObjects();
+    return children.length === 2
+      && children.some(child => child.type === "line")
+      && children.some(child => child.type === "triangle");
+  }
+
+  function applyColorToObject(object, target, color) {
+    if (!object) return false;
+    if (object.type === "group" && typeof object.getObjects === "function") {
+      const arrow = isArrowGroup(object);
+      if (arrow && target === "fill") return false;
+      let changed = false;
+      object.getObjects().forEach(child => {
+        if (arrow && target === "border" && child.type === "triangle") {
+          child.set({ fill: color, stroke: color });
+          changed = true;
+        } else if (applyColorToObject(child, target, color)) changed = true;
+      });
+      if (changed) {
+        object.dirty = true;
+        object.setCoords();
+      }
+      return changed;
+    }
+    if (target === "border") {
+      if (["i-text", "text", "textbox"].includes(object.type)) object.set("fill", color);
+      else if (["line", "path", "rect", "ellipse", "triangle"].includes(object.type)) object.set("stroke", color);
+      else return false;
+    } else {
+      if (!["rect", "ellipse"].includes(object.type)) return false;
+      object.set("fill", color);
+    }
+    object.setCoords();
+    return true;
+  }
+
+  function applyColorToSelection(target, color) {
+    if (!canvas || readOnly || fitted) return;
+    let changed = false;
+    canvas.getActiveObjects().forEach(object => {
+      if (applyColorToObject(object, target, color)) changed = true;
+    });
+    if (!changed) return;
+    canvas.requestRenderAll();
+    commit();
   }
 
   function shapeOptions() {
@@ -398,6 +451,7 @@
         if (canvas && canvas.freeDrawingBrush) canvas.freeDrawingBrush.color = color;
       }
       else activeFillColor = color;
+      applyColorToSelection(target, color);
       buttons.forEach(item => item.setAttribute("aria-pressed", String(item === button)));
       toggleButton.style.setProperty("--selected-whiteboard-color", color);
       const colorName = button.getAttribute("aria-label").replace(` ${target}`, "").toLowerCase();
@@ -410,6 +464,13 @@
   });
   toggle.addEventListener("click", () => setOpen(!open));
   stackToggleButton.addEventListener("click", toggleSelectionStack);
+  rotateButton.addEventListener("click", () => {
+    if (!canvas || readOnly || fitted) return;
+    const activeObject = canvas.getActiveObject();
+    if (!activeObject) return;
+    activeObject.rotate((activeObject.angle || 0) + 90);
+    canvas.requestRenderAll();
+  });
   deleteButton.addEventListener("click", removeSelected);
   undoButton.addEventListener("click", () => {
     if (readOnly || fitted || history.length <= 1) return;

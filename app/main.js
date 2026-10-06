@@ -27,13 +27,27 @@
     });
   }
 
+  let fabricScriptPromise = null;
+  function loadFabricScript() {
+    if (window.fabric) return Promise.resolve();
+    if (!fabricScriptPromise) {
+      fabricScriptPromise = loadScript(FABRIC_URL).catch(error => {
+        fabricScriptPromise = null;
+        throw error;
+      });
+    }
+    return fabricScriptPromise;
+  }
+
   // Each loader runs once and is shared by every caller; a failure clears it so a later attempt
   // can retry.
   let editorScriptsPromise = null;
   function loadEditorScripts() {
     if (!editorScriptsPromise) {
       editorScriptsPromise = Promise.all([
+        loadFabricScript(),
         loadScript(`${FRAMEWORK_URL}editor/file-access.js`),
+        loadScript(`${FRAMEWORK_URL}editor/image-editor.js`),
         loadScript(`${FRAMEWORK_URL}editor/editor.js`)
       ]).catch(error => {
         editorScriptsPromise = null;
@@ -49,7 +63,7 @@
       // The whiteboard reports its own "drawing tools could not be loaded" message if Fabric.js is
       // unavailable, so a Fabric failure is not fatal here.
       whiteboardScriptsPromise = Promise.all([
-        loadScript(FABRIC_URL).catch(error => console.warn(error)),
+        loadFabricScript().catch(error => console.warn(error)),
         loadScript(`${FRAMEWORK_URL}components/presenter-whiteboard.js`)
       ]).catch(error => {
         whiteboardScriptsPromise = null;
