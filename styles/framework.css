@@ -503,6 +503,8 @@ body.presenter-mode .slide-content .gpt-followups h2 { font-size: 1.1em; }
 .slide-content hr { margin: 0 0 1.25rem; }
 /* Half the between-block gap visually ties this lead-in text to the block that follows it */
 .slide-content .block-lead-markdown { margin: 0 0 .625rem; }
+.slide-content p { font-size: 1.05rem; }
+.slide-content li { font-size: 1.05rem; }
 .data-file-upload-button {
   display: inline-flex;
   align-items: center;
