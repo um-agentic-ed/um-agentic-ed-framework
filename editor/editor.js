@@ -399,6 +399,54 @@
     requestAnimationFrame(resize);
   }
 
+  function movableKind() {
+    if (!current) return null;
+    const depth = current.key.split("/").length;
+    if (current.kind === "slide" && depth === 4) return "slide";
+    if (current.kind !== "overview") return null;
+    if (depth === 2) return "category";
+    if (depth === 3) return "section";
+    return null;
+  }
+
+  async function copyTextToClipboard(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      try {
+        await navigator.clipboard.writeText(text);
+        return;
+      } catch (error) {
+        console.warn("The Clipboard API was unavailable; trying the browser copy command.", error);
+      }
+    }
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.setAttribute("readonly", "");
+    textarea.style.position = "fixed";
+    textarea.style.opacity = "0";
+    document.body.append(textarea);
+    textarea.select();
+    const copied = document.execCommand("copy");
+    textarea.remove();
+    if (!copied) throw new Error("The browser declined the copy command.");
+  }
+
+  async function copyCurrentPath(button) {
+    if (!current) return;
+    const defaultTitle = "Copy path to clipboard";
+    try {
+      await copyTextToClipboard(current.key);
+      button.classList.add("editor-icon-button--copied");
+      button.title = "Path copied!";
+      setTimeout(() => {
+        button.classList.remove("editor-icon-button--copied");
+        button.title = defaultTitle;
+      }, 1600);
+    } catch (error) {
+      console.error(error);
+      alert(`Could not copy the path to the clipboard: ${error.message}`);
+    }
+  }
+
   function buildMetaFields(data) {
     const wrapper = document.createElement("div");
     wrapper.className = "editor-meta";
@@ -408,8 +456,29 @@
     titleInput.value = data.title || "";
     titleInput.addEventListener("input", () => { data.title = titleInput.value; scheduleRefresh(); });
     const titleField = field("Slide Title", titleInput);
-    titleField.classList.add("editor-field--full");
-    wrapper.append(titleField);
+    const row = document.createElement("div");
+    row.className = "editor-title-row editor-field--full";
+    const copyPathButton = document.createElement("button");
+    copyPathButton.type = "button";
+    copyPathButton.className = "editor-icon-button";
+    copyPathButton.innerHTML = (window.umedIcons && window.umedIcons.copy) || "Copy";
+    copyPathButton.title = "Copy path to clipboard";
+    copyPathButton.setAttribute("aria-label", "Copy path to clipboard");
+    copyPathButton.addEventListener("click", () => copyCurrentPath(copyPathButton));
+    row.append(titleField, copyPathButton);
+
+    const kind = movableKind();
+    if (kind) {
+      const moveButton = document.createElement("button");
+      moveButton.type = "button";
+      moveButton.className = "editor-icon-button";
+      moveButton.innerHTML = (window.umedIcons && window.umedIcons.move) || "Move";
+      moveButton.title = `Move this ${kind}`;
+      moveButton.setAttribute("aria-label", `Move this ${kind}`);
+      moveButton.addEventListener("click", () => handleMove(kind, moveButton));
+      row.append(moveButton);
+    }
+    wrapper.append(row);
 
     return wrapper;
   }
@@ -1915,6 +1984,279 @@
   function findSectionEntry(subjectId, categoryId, sectionId) {
     const category = findCategoryEntry(subjectId, categoryId);
     return category && (category.sections || []).find(section => section.id === sectionId);
+  }
+
+  const hierarchySorted = items => (items || []).slice().sort((a, b) => a.order - b.order);
+
+  function moveDestinations(kind, path) {
+    const subjects = hierarchySorted(window.umedAppContentIndex && window.umedAppContentIndex.subjects);
+    if (kind === "category") {
+      return subjects.map(subject => ({
+        label: subject.title,
+        value: [subject.id],
+        current: subject.id === path[0],
+        disabled: subject.id !== path[0] && (subject.categories || []).some(category => category.id === path[1])
+      }));
+    }
+    if (kind === "section") {
+      return subjects.map(subject => ({
+        label: subject.title,
+        children: hierarchySorted(subject.categories).map(category => ({
+          label: category.title,
+          value: [subject.id, category.id],
+          current: subject.id === path[0] && category.id === path[1],
+          disabled: !(subject.id === path[0] && category.id === path[1]) &&
+            (category.sections || []).some(section => section.id === path[2])
+        }))
+      }));
+    }
+    return subjects.map(subject => ({
+      label: subject.title,
+      children: hierarchySorted(subject.categories).map(category => ({
+        label: category.title,
+        children: hierarchySorted(category.sections).map(section => ({
+          label: section.title,
+          value: [subject.id, category.id, section.id],
+          current: subject.id === path[0] && category.id === path[1] && section.id === path[2],
+          disabled: !(subject.id === path[0] && category.id === path[1] && section.id === path[2]) &&
+            (section.slides || []).some(slide => slide.id === path[3])
+        }))
+      }))
+    }));
+  }
+
+  function appendMoveTreeItem(list, item, name) {
+    const li = document.createElement("li");
+    if (item.value) {
+      const label = document.createElement("label");
+      const input = document.createElement("input");
+      input.type = "radio";
+      input.name = name;
+      input.value = item.value.join("/");
+      input.checked = item.current;
+      input.disabled = item.disabled;
+      const text = document.createElement("span");
+      text.textContent = `${item.label}${item.current ? " (current)" : item.disabled ? " (name already in use)" : ""}`;
+      label.append(input, text);
+      li.append(label);
+    } else {
+      const heading = document.createElement("strong");
+      heading.textContent = item.label;
+      li.append(heading);
+    }
+    if (item.children && item.children.length) {
+      const childList = document.createElement("ul");
+      item.children.forEach(child => appendMoveTreeItem(childList, child, name));
+      li.append(childList);
+    }
+    list.append(li);
+  }
+
+  function promptMoveDestination(kind, path) {
+    const parentKind = { category: "Subject", section: "Category", slide: "Section" }[kind];
+    const dialog = document.createElement("dialog");
+    dialog.className = "confirm-dialog move-dialog";
+    const instructions = document.createElement("p");
+    instructions.className = "confirm-dialog-message";
+    instructions.textContent = `Select a new ${parentKind} for this ${kind[0].toUpperCase()}${kind.slice(1)}.`;
+    const tree = document.createElement("ul");
+    tree.className = "move-dialog-tree";
+    const radioName = `move-destination-${Date.now()}`;
+    moveDestinations(kind, path).forEach(item => appendMoveTreeItem(tree, item, radioName));
+    const actions = document.createElement("div");
+    actions.className = "confirm-dialog-actions";
+    const cancel = document.createElement("button");
+    cancel.type = "button";
+    cancel.textContent = "Cancel";
+    const move = document.createElement("button");
+    move.type = "button";
+    move.className = "confirm-dialog-confirm";
+    move.textContent = `Move ${kind[0].toUpperCase()}${kind.slice(1)}`;
+    actions.append(cancel, move);
+    dialog.append(instructions, tree, actions);
+    document.body.append(dialog);
+
+    return new Promise(resolve => {
+      let completed = false;
+      const finish = result => {
+        if (completed) return;
+        completed = true;
+        if (dialog.open) dialog.close();
+        dialog.remove();
+        resolve(result);
+      };
+      cancel.addEventListener("click", () => finish(null));
+      move.addEventListener("click", () => {
+        const selected = tree.querySelector(`input[name="${radioName}"]:checked`);
+        finish(selected ? selected.value.split("/") : null);
+      });
+      dialog.addEventListener("cancel", event => { event.preventDefault(); finish(null); });
+      dialog.addEventListener("close", () => finish(null));
+      dialog.showModal();
+    });
+  }
+
+  function restoreIndex(snapshot) {
+    const target = window.umedAppContentIndex;
+    Object.keys(target).forEach(key => { delete target[key]; });
+    Object.assign(target, snapshot);
+  }
+
+  function nextOrder(items) {
+    return (items || []).reduce((maximum, item) => Math.max(maximum, Number(item.order) || 0), 0) + 10;
+  }
+
+  function applyMoveToIndex(kind, path, destination) {
+    if (kind === "category") {
+      const source = findSubjectEntry(path[0]);
+      const target = findSubjectEntry(destination[0]);
+      const item = source.categories.find(category => category.id === path[1]);
+      source.categories = source.categories.filter(category => category !== item);
+      item.order = nextOrder(target.categories);
+      target.categories.push(item);
+      return;
+    }
+    if (kind === "section") {
+      const source = findCategoryEntry(path[0], path[1]);
+      const target = findCategoryEntry(destination[0], destination[1]);
+      const item = source.sections.find(section => section.id === path[2]);
+      source.sections = source.sections.filter(section => section !== item);
+      item.order = nextOrder(target.sections);
+      target.sections.push(item);
+      return;
+    }
+    const source = findSectionEntry(path[0], path[1], path[2]);
+    const target = findSectionEntry(destination[0], destination[1], destination[2]);
+    const item = source.slides.find(slide => slide.id === path[3]);
+    source.slides = source.slides.filter(slide => slide !== item);
+    item.order = nextOrder(target.slides);
+    target.slides.push(item);
+  }
+
+  function remapLoadedContent(oldPrefix, newPrefix) {
+    Object.keys(window.umedAppContent || {}).forEach(oldKey => {
+      if (oldKey !== oldPrefix && !oldKey.startsWith(`${oldPrefix}/`)) return;
+      const newKey = `${newPrefix}${oldKey.slice(oldPrefix.length)}`;
+      window.umedAppContent[newKey] = window.umedAppContent[oldKey];
+      delete window.umedAppContent[oldKey];
+      if (savedSnapshots.has(oldKey)) {
+        savedSnapshots.set(newKey, savedSnapshots.get(oldKey));
+        savedSnapshots.delete(oldKey);
+      }
+      if (contentInfoByKey.has(oldKey)) {
+        const oldInfo = contentInfoByKey.get(oldKey);
+        const newInfo = { ...oldInfo, key: newKey, src: oldInfo.src.replace(oldPrefix, newPrefix) };
+        contentInfoByKey.set(newKey, newInfo);
+        contentInfoByKey.delete(oldKey);
+      }
+    });
+  }
+
+  async function moveCurrentContent(kind, destination) {
+    const path = current.key.split("/");
+    const parentDepth = { category: 1, section: 2, slide: 3 }[kind];
+    if (destination.join("/") === path.slice(0, parentDepth).join("/")) return null;
+    const oldPrefix = current.key;
+    const itemId = path[path.length - 1];
+    const newPrefix = `${destination.join("/")}/${itemId}`;
+    if ([...dirtyKeys].some(key => key === oldPrefix || key.startsWith(`${oldPrefix}/`))) {
+      throw new Error(`Save or discard changes in this ${kind[0].toUpperCase()}${kind.slice(1)} before moving it.`);
+    }
+    if (!window.umedEditorFS) throw new Error("File system access is unavailable.");
+    const rootHandle = await window.umedEditorFS.getContentRootHandle();
+    if (!rootHandle) throw new Error("Folder access was cancelled.");
+    if (await window.umedEditorFS.directoryExists(rootHandle, newPrefix)) {
+      throw new Error(`Folder "${newPrefix}" already exists.`);
+    }
+
+    const noun = `${kind[0].toUpperCase()}${kind.slice(1)}`;
+    const totalSteps = 5;
+    let completedSteps = 0;
+    const progress = window.umedComponents && window.umedComponents.showProgress
+      ? window.umedComponents.showProgress(
+          `Moving ${noun}`,
+          `Checking the destination for ${noun} "${itemId}"…`,
+          { max: totalSteps }
+        )
+      : null;
+    const updateProgress = message => progress && progress.update({ message, value: completedSteps });
+    const indexSnapshot = JSON.parse(JSON.stringify(window.umedAppContentIndex));
+    let copied = false;
+    try {
+      const prospectivePaths = (await window.umedEditorFS.listFilesRecursive(rootHandle, oldPrefix))
+        .map(suffix => `${newPrefix}/${suffix}`);
+      await window.umedEditorFS.checkPathBudget(rootHandle, prospectivePaths);
+      completedSteps += 1;
+
+      updateProgress(`Copying the ${noun} to its new location…`);
+      await window.umedEditorFS.copyDirectory(rootHandle, oldPrefix, newPrefix);
+      copied = true;
+      completedSteps += 1;
+
+      updateProgress(`Updating paths inside the moved ${noun}…`);
+      await window.umedEditorFS.replaceTextInJavaScriptFiles(rootHandle, newPrefix, oldPrefix, newPrefix);
+      applyMoveToIndex(kind, path, destination);
+      if (kind === "slide") {
+        const movedEntry = findSectionEntry(...destination).slides.find(slide => slide.id === itemId);
+        const data = window.umedAppContent[oldPrefix] || await loadSlideContent(oldPrefix, current.src);
+        data.level = movedEntry.level;
+        data.order = movedEntry.order;
+        await window.umedEditorFS.writeTextFile(
+          rootHandle,
+          `${newPrefix}/slide.js`,
+          serializeContentFile({ kind: "slide", key: newPrefix }, data)
+        );
+      }
+      completedSteps += 1;
+
+      updateProgress("Saving the updated content index…");
+      await writeIndexFile(rootHandle);
+      completedSteps += 1;
+    } catch (error) {
+      restoreIndex(indexSnapshot);
+      updateProgress(`The move failed. Cleaning up the incomplete ${noun}…`);
+      if (copied) {
+        try { await window.umedEditorFS.deleteDirectory(rootHandle, newPrefix); } catch (cleanupError) { console.error(cleanupError); }
+      }
+      if (progress) progress.close();
+      throw error;
+    }
+
+    remapLoadedContent(oldPrefix, newPrefix);
+    updateProgress(`Removing the ${noun} from its original location…`);
+    try {
+      await window.umedEditorFS.deleteDirectory(rootHandle, oldPrefix);
+      completedSteps += 1;
+      if (progress) progress.close();
+      return { newPrefix, warning: null };
+    } catch (error) {
+      console.error(error);
+      if (progress) progress.close();
+      return { newPrefix, warning: `The ${kind} was moved, but the original folder could not be removed. Remove the duplicate folder after verifying the move.` };
+    }
+  }
+
+  async function handleMove(kind, button) {
+    const infoAtStart = current;
+    const path = infoAtStart.key.split("/");
+    const destination = await promptMoveDestination(kind, path);
+    if (!destination || current !== infoAtStart) return;
+    const originalLabel = button.innerHTML;
+    button.disabled = true;
+    button.textContent = "…";
+    try {
+      const result = await moveCurrentContent(kind, destination);
+      if (!result) return;
+      if (result.warning) alert(result.warning);
+      if (window.umedApp && typeof window.umedApp.refreshNavigation === "function") window.umedApp.refreshNavigation();
+      location.hash = `#/${result.newPrefix}`;
+    } catch (error) {
+      console.error(error);
+      alert(`Could not move ${kind}: ${error.message}`);
+    } finally {
+      button.innerHTML = originalLabel;
+      button.disabled = false;
+    }
   }
 
   // Slides are always deletable. A Subject/Category/Section landing Slide is only classified as a

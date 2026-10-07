@@ -56,6 +56,9 @@
       '<rect x="5.5" y="5.5" width="8" height="8" rx="1" fill="none" stroke="currentColor" stroke-width="1.3"/>' +
       '<path d="M10.5 5.5V3.75A1.25 1.25 0 0 0 9.25 2.5h-6A1.25 1.25 0 0 0 2 3.75v6A1.25 1.25 0 0 0 3.25 11H5.5" fill="none" stroke="currentColor" stroke-width="1.3"/>' +
       '</svg>',
+    move: '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">' +
+      '<path d="M2.5 5.5h7M7.5 2.5l3 3-3 3M13.5 10.5h-7M8.5 7.5l-3 3 3 3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>' +
+      '</svg>',
     // Brand-neutral speech bubble with a sparkle, used for the chatbot controls.
     chatbot: '<svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M4.5 3.5h11A1.5 1.5 0 0 1 17 5v7a1.5 1.5 0 0 1-1.5 1.5H10l-3.5 3v-3h-2A1.5 1.5 0 0 1 3 12V5a1.5 1.5 0 0 1 1.5-1.5z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M10 6l.9 2.1L13 9l-2.1.9L10 12l-.9-2.1L7 9l2.1-.9z" fill="currentColor"/></svg>',
     // The six-loop ChatGPT mark. Currently unused; kept so it can replace the neutral icon above.
