@@ -1126,7 +1126,7 @@
       ? await window.umedComponents.promptText("Title for the new Section:", { confirmLabel: "Add Section" })
       : null;
     if (!title) return;
-    const id = uniqueId(title, category.sections.map(item => item.id));
+    const id = uniqueId(nameFromTitle(title), category.sections.map(item => item.id));
     let uuid;
     try {
       uuid = createUuid();
@@ -1168,7 +1168,7 @@
       ? await window.umedComponents.promptText("Title for the new Category:", { confirmLabel: "Add Category" })
       : null;
     if (!title) return;
-    const id = uniqueId(title, subject.categories.map(item => item.id));
+    const id = uniqueId(nameFromTitle(title), subject.categories.map(item => item.id));
     let uuid;
     try {
       uuid = createUuid();
@@ -1444,7 +1444,7 @@
       ? await window.umedComponents.promptText("Title for the new Subject:", { confirmLabel: "Add Subject" })
       : null;
     if (!title) return;
-    const id = uniqueId(title, [...index.subjects.map(item => item.id), ...RESERVED_SUBJECT_IDS]);
+    const id = uniqueId(nameFromTitle(title), [...index.subjects.map(item => item.id), ...RESERVED_SUBJECT_IDS]);
     let uuid;
     try {
       uuid = createUuid();
@@ -2019,32 +2019,81 @@
     persistChangedSlides(target.subject.id, target.category.id, section.id, changed);
   }
 
+  // Any id that becomes a path segment (Subject/Category/Section/Slide) is capped at this length
+  // so deeply nested project folders (e.g. inside a Dropbox or OneDrive synced folder) stay well
+  // clear of Windows' 260-character MAX_PATH limit; editor/file-access.js's checkPathBudget is the
+  // matching runtime safety net for moves/splits. Titles may be any natural length; only the id
+  // derived from one is capped.
+  const MAX_PATH_NAME_LENGTH = 20;
+
+  // Cuts `id` down to at most `maxLength` characters, preferring to cut at a hyphen boundary so a
+  // whole word is never chopped mid-way; falls back to a hard cut only if no boundary exists early
+  // enough to leave anything.
+  function truncateIdToLength(id, maxLength) {
+    if (id.length <= maxLength) return id;
+    const truncated = id.slice(0, maxLength);
+    const lastHyphen = truncated.lastIndexOf("-");
+    return lastHyphen > 0 ? truncated.slice(0, lastHyphen) : truncated;
+  }
+
   // Generates a kebab-case id from a title, unique among `existingIds` — used for new Slides,
-  // Sections, and Categories alike.
-  function uniqueId(title, existingIds) {
-    const base = title.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "item";
+  // Sections, Categories and Subjects alike. `title` here should already be short and
+  // path-friendly (e.g. the Editor's own typed Slide/Section name, or nameFromTitle's output for
+  // auto-derived Category/Section/Subject ids): this only slugifies, length-caps, and dedupes — it
+  // does not drop common words (see nameFromTitle below for that). The base only sacrifices
+  // characters for a "-N" dedupe suffix once a collision actually occurs, so an already-unique,
+  // full-length name (e.g. one an Editor typed right up to the dialog's own maxlength) is never
+  // truncated unnecessarily.
+  function uniqueId(title, existingIds, maxLength = MAX_PATH_NAME_LENGTH) {
+    const slug = title.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "item";
+    const base = truncateIdToLength(slug, maxLength) || "item";
     const idSet = new Set(existingIds);
-    let id = base;
+    if (!idSet.has(base)) return base;
+    let id;
     let suffix = 2;
-    while (idSet.has(id)) {
-      id = `${base}-${suffix}`;
+    do {
+      const suffixText = `-${suffix}`;
+      id = truncateIdToLength(base, Math.max(1, maxLength - suffixText.length)) + suffixText;
       suffix += 1;
-    }
+    } while (idSet.has(id));
     return id;
   }
 
-  // New Slide paths should be short but recognizable. Ignore common function words and retain at
-  // most three meaningful words from the title; the Editor can always replace this suggestion.
-  function slideNameFromTitle(title, sectionBreak) {
-    const trivialWords = new Set([
-      "a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "how", "in", "into",
-      "is", "it", "its", "of", "on", "or", "the", "to", "was", "were", "what", "when", "where",
-      "which", "who", "why", "with", "about", "after", "before", "between", "during", "over", "under",
-      "via", "vs", "versus", "your", "our", "their", "this", "that", "these", "those"
-    ]);
+  // Low-value words that shouldn't burn budget in a short, path-friendly name derived from a
+  // (freely long) title. Shared by nameFromTitle below.
+  const TRIVIAL_NAME_WORDS = new Set([
+    "a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "how", "in", "into",
+    "is", "it", "its", "of", "on", "or", "the", "to", "was", "were", "what", "when", "where",
+    "which", "who", "why", "with", "about", "after", "before", "between", "during", "over", "under",
+    "via", "vs", "versus", "your", "our", "their", "this", "that", "these", "those"
+  ]);
+
+  // Converts a (possibly long, natural-language) title into a short, readable kebab-case name
+  // suitable as a path segment: common/trivial words are dropped first (falling back to the full
+  // word list if that leaves nothing), then as many of the remaining whole words as fit are joined
+  // with hyphens — a word is never chopped mid-way by the length cap unless even the first word
+  // alone exceeds it. Returns "" only when the title has no alphanumeric content at all; callers
+  // supply their own fallback (e.g. "slide", "section") for that case.
+  function nameFromTitle(title, maxLength = MAX_PATH_NAME_LENGTH) {
     const words = (title || "").toLowerCase().match(/[a-z0-9]+/g) || [];
-    const meaningfulWords = words.filter(word => !trivialWords.has(word)).slice(0, 3);
-    return meaningfulWords.join("-") || (sectionBreak ? "section" : "slide");
+    const meaningfulWords = words.filter(word => !TRIVIAL_NAME_WORDS.has(word));
+    const candidateWords = meaningfulWords.length ? meaningfulWords : words;
+    let result = "";
+    for (const word of candidateWords) {
+      const next = result ? `${result}-${word}` : word;
+      if (next.length > maxLength) {
+        if (!result) return word.slice(0, maxLength);
+        break;
+      }
+      result = next;
+    }
+    return result;
+  }
+
+  // New Slide/Section-break names should be short but recognizable; the Editor can always
+  // overwrite this suggestion (bounded by the dialog's own maxlength, see components/modal.js).
+  function slideNameFromTitle(title, sectionBreak) {
+    return nameFromTitle(title) || (sectionBreak ? "section" : "slide");
   }
 
   // Splits the viewed Section at a Slides menu insertion point. The new Section (whose landing
@@ -2123,6 +2172,7 @@
         message: "Add a new Slide",
         confirmLabel: "Add Slide",
         allowSectionBreak: true,
+        maxNameLength: MAX_PATH_NAME_LENGTH,
         nameFromTitle: slideNameFromTitle
       })
       : null;

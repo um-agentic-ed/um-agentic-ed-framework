@@ -39,6 +39,25 @@ The app has three page states:
   - Editor Mode is only honored for `file:///` URLs and disabled when the app is
     served by a web file server.
   - Editor Mode is not secured; anyone can edit their local repository clone.
+  - Many Editors keep their Parent repository in a cloud-synced folder (Dropbox,
+    OneDrive, etc.). On Windows these represent every file as an NTFS reparse
+    point and can transiently fail a File System Access read/write with
+    `NotFoundError`, or Chrome's "stale interface object" error, while a
+    not-yet-downloaded file is hydrated or a directory listing is mid-sync.
+    `editor/file-access.js` centralizes all raw File System Access calls and
+    retries these two errors with real (multi-second) backoff before surfacing
+    a failure, and any new Editor Mode code must call through its shared
+    helpers rather than invoking the File System Access API directly, so this
+    resilience is never bypassed.
+  - The File System Access API never exposes the absolute OS path above the
+    folder an Editor picks, so a deeply nested project folder (again, typically
+    from a cloud-synced parent folder) can silently leave very little budget
+    before Windows' classic 260-character MAX_PATH limit, which also surfaces
+    as `NotFoundError`. Operations that lengthen a path (`splitSection`,
+    `moveSection`) call `editor/file-access.js`'s `checkPathBudget`, which
+    empirically calibrates the safe length once per session by probing a
+    throwaway file, and refuses immediately with a clear message instead of
+    failing only after attempting the real, lengthy copy.
 - *Presenter Mode* is a variation of Learner Mode optimized for projected views
   of content with an interactive whiteboard.
 
@@ -118,6 +137,40 @@ Educational content is structured in hierarchical levels:
   Slide attribute helps organize Slide navigation within a Section, and all 
   Block files and definitions are stored in the parent Slide's folder and 
   description.
+- Every Subject, Category, Section, and Slide has a kebab-case `id` that becomes
+  a folder name and so a path segment (see File tree below), separate from its
+  freely long, natural-language `title`. Each `id` is capped at 20 characters so
+  that even a deeply nested project folder (e.g. inside a Dropbox or OneDrive
+  synced folder) stays well clear of Windows' 260-character `MAX_PATH` limit;
+  `editor/file-access.js`'s `checkPathBudget` is the runtime safety net that
+  refuses an operation outright if a path would still exceed what the Editor's
+  actual folder location supports. Converting a title into an id, whether done
+  by the in-app Editor UI or by an Agent (e.g. the `import-powerpoint` or
+  `fill-or-update-section` skills), must follow the same rule so the result is
+  short, readable, and usually unique without needing the title's full wording:
+  1. Lowercase the title and split it into words (letters/digits only).
+  2. Drop common/low-value words (articles, prepositions, conjunctions, and
+     similar function words, e.g. "a", "the", "with", "and", "of", "for"), 
+     unless doing so would leave no words at all, in which case keep the 
+     original word list.
+  3. Join remaining whole words with hyphens, adding one word at a time only
+     while the result stays at or under 20 characters; stop before adding a
+     word that would exceed the limit, even if that leaves only one word.
+  4. If even the first word alone exceeds 20 characters, hard-truncate just
+     that word to 20 characters rather than producing an empty id.
+  5. If an id collides with a sibling at the same level, append `-2`, `-3`, etc.,
+     shortening the base id first if necessary so the suffixed id still fits in
+     20 characters.
+  - `app/main.js`'s `nameFromTitle` and `uniqueId` implement this rule for the
+    in-app Editor UI; apply the same rule by hand when a skill generates ids
+    directly. Abbreviating individual long words (e.g. "replication" ->
+    "repl") is acceptable for an Agent to use its judgement on when it keeps the
+    id recognizable, but is not required and is not implemented in the UI's
+    JavaScript logic.
+  - A user-typed name (e.g. the Slide/Section-break dialog's "name" field) is
+    simply slugified and is not stripped of common words, since it is the
+    Editor's deliberate choice; the dialog's input enforces the 20-character
+    limit directly (shown in its label) so this never needs truncation.
 
 # App layout and styles
 

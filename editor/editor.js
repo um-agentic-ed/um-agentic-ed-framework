@@ -1665,6 +1665,13 @@
     const rootHandle = await window.umedEditorFS.getContentRootHandle();
     if (!rootHandle) throw new Error("Folder access was cancelled.");
 
+    // Same path-length preflight as splitSection: a longer destination Category id can push an
+    // already-borderline path (common in a deeply nested, e.g. Dropbox/OneDrive-synced, project
+    // folder) over this file system's limit.
+    const prospectivePaths = (await window.umedEditorFS.listFilesRecursive(rootHandle, oldPrefix))
+      .map(suffix => `${newPrefix}/${suffix}`);
+    await window.umedEditorFS.checkPathBudget(rootHandle, prospectivePaths);
+
     let copied = false;
     try {
       await window.umedEditorFS.copyDirectory(rootHandle, oldPrefix, newPrefix);
@@ -1747,14 +1754,33 @@
       throw new Error(`Folder "${newPrefix}" already exists.`);
     }
 
+    // Preflight: refuse immediately, with a clear and actionable message, if any moved Slide's
+    // files would land at a path too long for this computer's file system -- a real risk for a
+    // deeply nested project folder (e.g. inside a Dropbox or OneDrive synced folder), since
+    // moving into a longer Section name can push already-borderline paths over the edge. Without
+    // this, the same failure only surfaces after a long, confusing retry-then-fail during the
+    // real copy below.
+    const prospectivePaths = [];
+    for (const slideId of movedSlideIds) {
+      const suffixes = await window.umedEditorFS.listFilesRecursive(rootHandle, `${oldPrefix}/${slideId}`);
+      for (const suffix of suffixes) prospectivePaths.push(`${newPrefix}/${slideId}/${suffix}`);
+    }
+    await window.umedEditorFS.checkPathBudget(rootHandle, prospectivePaths);
+
     try {
+      console.info(`[splitSection] Writing landing file for new Section "${newPrefix}" (moving ${movedSlideIds.length} Slide(s): ${movedSlideIds.join(", ")})`);
       await window.umedEditorFS.writeTextFile(rootHandle, `${newPrefix}/section.js`, serializeContentFile({ kind: "overview", key: newPrefix }, landingData));
       for (const slideId of movedSlideIds) {
+        console.info(`[splitSection] Copying Slide "${slideId}" from "${oldPrefix}" to "${newPrefix}"`);
         await window.umedEditorFS.copyDirectory(rootHandle, `${oldPrefix}/${slideId}`, `${newPrefix}/${slideId}`);
+        console.info(`[splitSection] Rewriting content key for Slide "${slideId}" in its new location`);
         await window.umedEditorFS.replaceTextInJavaScriptFiles(rootHandle, `${newPrefix}/${slideId}`, `${oldPrefix}/${slideId}`, `${newPrefix}/${slideId}`);
       }
+      console.info(`[splitSection] All Slides copied; writing content-index.js`);
       await writeIndexFile(rootHandle);
+      console.info(`[splitSection] Done.`);
     } catch (error) {
+      console.error(`[splitSection] FAILED: ${error && error.name}: ${error && error.message}`, error);
       try { await window.umedEditorFS.deleteDirectory(rootHandle, newPrefix); } catch (cleanupError) { console.error(cleanupError); }
       throw error;
     }

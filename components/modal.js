@@ -221,7 +221,10 @@
   // `nameFromTitle(title, sectionBreak)` supplies the concise kebab-case suggestion while the user
   // is still editing the title. The "section break" checkbox starts unchecked on every open and
   // relabels the whole dialog from "Slide" to "Section"; it is only offered when
-  // `opts.allowSectionBreak` is true.
+  // `opts.allowSectionBreak` is true. `opts.maxNameLength` both caps the input (via its `maxlength`
+  // attribute, so the Editor physically cannot type past it) and is shown in the label; it should
+  // match app/main.js's MAX_PATH_NAME_LENGTH (kept as a separate constant here since this
+  // component has no shared module system with main.js), falling back to 20 if ever omitted.
   function promptNewSlide(options) {
     const opts = options || {};
     const modal = ensureSlidePromptDialog();
@@ -234,11 +237,13 @@
 
     const applyLabels = () => {
       const noun = modal._sectionBreakInput.checked ? "Section" : "Slide";
+      const maxLength = opts.maxNameLength || 20;
       modal._message.textContent = modal._sectionBreakInput.checked ? "Add a new Section Break" : (opts.message || "Add a new Slide");
       modal._titleText.textContent = `${noun} title`;
-      modal._nameText.textContent = `${noun} name (used in paths and folder names)`;
+      modal._nameText.textContent = `${noun} name (used in paths and folder names; max. ${maxLength} chars)`;
       modal._confirmButton.textContent = modal._sectionBreakInput.checked ? "Add Section Break" : (opts.confirmLabel || "Add Slide");
     };
+    modal._nameInput.maxLength = opts.maxNameLength || 20;
     applyLabels();
 
     return new Promise(resolve => {

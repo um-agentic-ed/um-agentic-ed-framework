@@ -10,9 +10,17 @@
   async function getHandle(rootHandle, relativePath) {
     const segments = relativePath.split("/").filter(Boolean);
     const fileName = segments.pop();
-    let directory = rootHandle;
-    for (const segment of segments) directory = await directory.getDirectoryHandle(segment);
-    return directory.getFileHandle(fileName);
+    const retry = window.umedEditorFS && window.umedEditorFS.withRetry;
+    const maxAttempts = window.umedEditorFS && window.umedEditorFS.BULK_ATTEMPTS;
+    const resolve = async () => {
+      let directory = rootHandle;
+      for (const segment of segments) directory = await directory.getDirectoryHandle(segment);
+      return directory.getFileHandle(fileName);
+    };
+    // Export reads every file in the content tree in one pass, so it's exposed to the same
+    // cloud-sync (Dropbox Smart Sync, OneDrive Files On-Demand) hydration delays as Editor Mode's
+    // bulk Section copy/move; reuse its retry policy rather than failing on the first hiccup.
+    return retry ? retry(resolve, maxAttempts) : resolve();
   }
 
   async function readFile(rootHandle, relativePath) {
