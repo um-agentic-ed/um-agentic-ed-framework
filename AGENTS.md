@@ -66,6 +66,12 @@ The app has three page states:
   adding them to the codebase:
   - Download third-party libraries using a pinned CDN when possible.
   - The following libraries are APPROVED: 
+    - Use markdown-it (pinned jsDelivr CDN `<script>` in `index.html`, global
+      `markdownit`) for rendering HTML from `markdown` fields and from Question
+      block prompts, choices and feedback. It runs with raw HTML disabled, so
+      it is safe by design, and the app adds `target="umed-external"` and
+      `rel="noopener noreferrer"` to rendered links. No other rendering of
+      arbitrary text into HTML is allowed in the app.
     - Use Chart.js for all plots and charts in `widget` blocks.
     - Use Tabulator for all interactive data tables in `widget` blocks.
     - Use Sortable.js for drag-and-drop list reordering, both in Editor mode (e.g.
@@ -412,11 +418,15 @@ route identity, so they do not carry content-Slide-only `id`, `level`, `order`, 
 
 A Slide's `content` field has a `blocks` array. Each block has a `type` and
 type-specific fields:
-- `text` block: a `markdown` field containing plain text with a small
-  controlled set of Markdown formatting: bold (`**text**`), italic
-  (`*text*`), inline code (`` `text` ``), and heading lines (`#` through
-  `######`, rendered as `<h1>`–`<h6>`). Raw HTML is not allowed to keep the
-  Editor input a simple text area and avoid unsanitized markup.
+- `text` block: a `markdown` field containing CommonMark Markdown rendered by
+  markdown-it: paragraphs, headings, bold, italic, inline code, code blocks,
+  ordered/unordered lists, GFM tables, blockquotes, horizontal rules, links
+  (opened in a new `umed-external` tab) and auto-linked URLs. A single newline
+  renders as a line break. Raw HTML is not allowed (it is shown as literal
+  text), and Markdown images (`![]()`) are never loaded and show only their alt text; use an `image` block,
+  which carries alt text and attribution. Question block `prompt` fields
+  render as block Markdown, and Question choice text and feedback render as
+  inline-only Markdown.
 - `image`, `link`, `widget`, and `dataFile` blocks additionally accept an
   optional `markdown` field, edited and rendered identically to the `text`
   block's `markdown` above, but shown as the first input row in the Editor
@@ -809,8 +819,8 @@ When generating content for a Section, you should:
 
 # Security requirements
 - Never place protected health information (PHI), credentials, copyrighted 
-  downloads, or secrets in committed repository files, browser storage, URLs, or 
-  application logs.
+  downloads, secrets, or unsafe code in committed repository files, browser 
+  storage, URLs, widget code, Slide content, or application logs.
 - Screen all repository files for disallowed secure content as listed above prior
   to commit or push.
 - Ensure that user actions with content beyond your control that might lead to 

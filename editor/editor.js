@@ -414,7 +414,6 @@
     return wrapper;
   }
 
-  const MARKDOWN_HELP_TEXT = "Supports **bold**, *italic*, `code`, and heading lines starting with # through ###### (e.g. ## Sub-heading).";
   const DRAG_HANDLE_GLYPH = "\u283f";
   // Purely a UI convenience (which blocks are visually collapsed in the Editor pane), never
   // saved with Slide content. Keyed by block object identity so state survives a rerender()
@@ -431,9 +430,6 @@
     textarea.addEventListener("input", () => { block.markdown = textarea.value; scheduleRefresh(); });
     autoSizeTextarea(textarea);
     const markdownField = field("Markdown text (optional)", textarea);
-    if (window.umedComponents && window.umedComponents.attachTooltip) {
-      window.umedComponents.attachTooltip(markdownField.querySelector("span"), MARKDOWN_HELP_TEXT);
-    }
     return markdownField;
   }
 
@@ -842,9 +838,6 @@
     fieldset.append(legend);
 
     if (block.type === "text") {
-      if (window.umedComponents && window.umedComponents.attachTooltip) {
-        window.umedComponents.attachTooltip(legend, MARKDOWN_HELP_TEXT);
-      }
       const textarea = document.createElement("textarea");
       textarea.value = block.markdown || "";
       textarea.addEventListener("input", () => { block.markdown = textarea.value; scheduleRefresh(); });

@@ -461,6 +461,33 @@ body.presenter-mode .slide-content .gpt-followups h2 { font-size: 1.1em; }
 .slide-content h1 { margin-top: 0; }
 .slide-content img { max-width: 100%; height: auto; }
 .slide-content .text-block { margin: 0 0 1.25rem; }
+.slide-content .text-block > :first-child, .slide-content .block-lead-markdown > :first-child,
+.question-prompt > :first-child, .question-feedback > :first-child { margin-top: 0; }
+.slide-content .text-block > :last-child, .slide-content .block-lead-markdown > :last-child,
+.question-prompt > :last-child, .question-feedback > :last-child { margin-bottom: 0; }
+.slide-content .text-block table, .slide-content .block-lead-markdown table, .question-prompt table {
+  border-collapse: collapse;
+  margin: 0 0 1rem;
+}
+.slide-content .text-block th, .slide-content .text-block td,
+.slide-content .block-lead-markdown th, .slide-content .block-lead-markdown td,
+.question-prompt th, .question-prompt td {
+  padding: .35rem .7rem;
+  border: 1px solid #9ba7b1;
+}
+.slide-content .text-block th, .slide-content .block-lead-markdown th, .question-prompt th { background: #eef3f6; }
+.slide-content .text-block blockquote, .slide-content .block-lead-markdown blockquote {
+  margin: 0 0 1rem;
+  padding: .1rem 1rem;
+  border-left: 4px solid #9ba7b1;
+  color: #44525c;
+}
+.slide-content .text-block pre, .slide-content .block-lead-markdown pre {
+  overflow-x: auto;
+  padding: .75rem;
+  background: #eef3f6;
+  border-radius: 4px;
+}
 .slide-content .image-block {
   display: block;
   width: fit-content;

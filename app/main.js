@@ -2112,7 +2112,7 @@
     if (block.type === "text") {
       const div = document.createElement("div");
       div.className = "text-block";
-      div.innerHTML = markdownToSafeHtml(block.markdown || "", true);
+      div.innerHTML = renderMarkdown(block.markdown);
       parent.append(div);
     } else if (block.type === "instructions") {
       // Retained authoring instructions are deliberately invisible in Learner Mode.
@@ -2212,7 +2212,7 @@
     if (!block.markdown) return;
     const div = document.createElement("div");
     div.className = "block-lead-markdown";
-    div.innerHTML = markdownToSafeHtml(block.markdown, true);
+    div.innerHTML = renderMarkdown(block.markdown);
     parent.append(div);
   }
 
@@ -2272,53 +2272,44 @@
     parent.append(wrapper);
   }
 
-  function markdownToSafeHtml(text, useParagraphs = false) {
-    const escaped = text.replace(/[&<>"']/g, char => ({
-      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
-    })[char]);
-    const withInline = escaped
-      .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-      .replace(/\*(.+?)\*/g, "<em>$1</em>")
-      .replace(/`([^`]+)`/g, "<code>$1</code>");
+  // The only place free-text Editor entries become HTML (see AGENTS.md). markdown-it runs with raw
+  // HTML disabled and its built-in link validation (blocks javascript:/vbscript:/most data: URLs).
+  // Markdown images are never loaded (shown as their alt text) because image blocks carry the\n  // required alt text and attribution.
+  let markdownRenderer = null;
 
-    // Text blocks and block lead-ins use one block element per input line so headings and
-    // conceptual paragraphs are sibling elements. Empty input lines intentionally become empty
-    // paragraphs, preserving the spacing the Editor entered without inserting stray <br> nodes.
-    if (useParagraphs) {
-      return withInline.split(/\r?\n/).map(line => {
-        const heading = line.match(/^(#{1,6})\s+(.+)$/);
-        if (heading) {
-          const level = heading[1].length;
-          return `<h${level}>${heading[2]}</h${level}>`;
-        }
-        return `<p>${line}</p>`;
-      }).join("");
-    }
-
-    // Question fields retain compact inline rendering because choices live inside <span>
-    // elements and feedback is prefixed with Correct/Incorrect text.
-    const parts = [];
-    let paragraphLines = [];
-    const flushParagraph = () => {
-      if (paragraphLines.length) {
-        parts.push(paragraphLines.join("<br>"));
-        paragraphLines = [];
-      }
+  function getMarkdownRenderer() {
+    if (markdownRenderer || typeof window.markdownit !== "function") return markdownRenderer;
+    const renderer = window.markdownit({ html: false, linkify: true, breaks: true, typographer: false });
+    renderer.renderer.rules.image = (tokens, index) => escapeHtml(tokens[index].content);
+    const defaultLinkOpen = renderer.renderer.rules.link_open
+      || ((tokens, index, options, env, self) => self.renderToken(tokens, index, options));
+    renderer.renderer.rules.link_open = (tokens, index, options, env, self) => {
+      tokens[index].attrSet("target", "umed-external");
+      tokens[index].attrSet("rel", "noopener noreferrer");
+      return defaultLinkOpen(tokens, index, options, env, self);
     };
-    for (const line of withInline.split(/\r?\n/)) {
-      const heading = line.match(/^(#{1,6})\s+(.+)$/);
-      if (heading) {
-        flushParagraph();
-        const level = heading[1].length;
-        parts.push(`<h${level}>${heading[2]}</h${level}>`);
-      } else {
-        paragraphLines.push(line);
-      }
-    }
-    flushParagraph();
-    return parts.join("");
+    markdownRenderer = renderer;
+    return markdownRenderer;
   }
 
+  function escapeHtml(text) {
+    return String(text).replace(/[&<>"']/g, char => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+    })[char]);
+  }
+
+  // Block-level Markdown (paragraphs, headings, lists, tables, ...) for text blocks, block
+  // lead-ins, and question prompts. If markdown-it failed to load, falls back to escaped plain text.
+  function renderMarkdown(text) {
+    const renderer = getMarkdownRenderer();
+    return renderer ? renderer.render(String(text || "")) : `<p>${escapeHtml(text || "")}</p>`;
+  }
+
+  // Inline-only Markdown for places nested in inline elements (question choices and feedback).
+  function renderMarkdownInline(text) {
+    const renderer = getMarkdownRenderer();
+    return renderer ? renderer.renderInline(String(text || "")) : escapeHtml(text || "");
+  }
   // Question blocks can appear any number of times, mixed with other block types, on a single
   // Slide, so each instance needs its own independent radio group name (a static shared name, as
   // used when Question was a whole Slide type, would let a Learner's answer on one Question
@@ -2332,7 +2323,7 @@
 
     const prompt = document.createElement("div");
     prompt.className = "question-prompt";
-    prompt.innerHTML = markdownToSafeHtml(block.prompt || "");
+    prompt.innerHTML = renderMarkdown(block.prompt);
     const list = document.createElement("ol");
     list.className = "question-choices";
     const feedback = document.createElement("div");
@@ -2347,12 +2338,12 @@
       input.name = groupName;
       input.value = String(position);
       const choiceText = document.createElement("span");
-      choiceText.innerHTML = markdownToSafeHtml(choice.text || "");
+      choiceText.innerHTML = renderMarkdownInline(choice.text);
       input.addEventListener("change", () => {
         feedback.hidden = false;
         const prefix = choice.correct ? "Correct." : "Incorrect.";
         feedback.innerHTML = choice.feedback
-          ? `${prefix} ${markdownToSafeHtml(choice.feedback)}`
+          ? `${prefix} ${renderMarkdownInline(choice.feedback)}`
           : prefix;
         feedback.classList.toggle("question-feedback--correct", choice.correct);
         feedback.classList.toggle("question-feedback--incorrect", !choice.correct);
