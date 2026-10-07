@@ -358,4 +358,60 @@
   }
 
   window.umedComponents.chooseOption = chooseOption;
+
+  // Non-dismissible progress feedback for filesystem operations that must run to completion.
+  // Returns a small controller so the operation can update its message/count and close the modal
+  // when work finishes. Native showModal() makes the rest of the App inert while work is active.
+  let progressDialog = null;
+
+  function ensureProgressDialog() {
+    if (progressDialog) return progressDialog;
+    progressDialog = document.createElement("dialog");
+    progressDialog.className = "confirm-dialog progress-dialog";
+    progressDialog.setAttribute("aria-labelledby", "umed-progress-title");
+    progressDialog.setAttribute("aria-describedby", "umed-progress-status");
+
+    const title = document.createElement("h2");
+    title.id = "umed-progress-title";
+    title.className = "progress-dialog-title";
+    const status = document.createElement("p");
+    status.id = "umed-progress-status";
+    status.className = "confirm-dialog-message";
+    status.setAttribute("aria-live", "polite");
+    const progress = document.createElement("progress");
+    progress.className = "progress-dialog-meter";
+
+    progressDialog.append(title, status, progress);
+    progressDialog.addEventListener("cancel", event => event.preventDefault());
+    document.body.append(progressDialog);
+    progressDialog._title = title;
+    progressDialog._status = status;
+    progressDialog._progress = progress;
+    return progressDialog;
+  }
+
+  function showProgress(title, message, options) {
+    const modal = ensureProgressDialog();
+    const opts = options || {};
+    modal._title.textContent = title;
+    modal._status.textContent = message;
+    modal._progress.max = opts.max || 1;
+    modal._progress.value = opts.value || 0;
+    if (!modal.open) modal.showModal();
+
+    return {
+      update(update) {
+        const next = update || {};
+        if (next.title !== undefined) modal._title.textContent = next.title;
+        if (next.message !== undefined) modal._status.textContent = next.message;
+        if (next.max !== undefined) modal._progress.max = next.max;
+        if (next.value !== undefined) modal._progress.value = next.value;
+      },
+      close() {
+        if (modal.open) modal.close();
+      }
+    };
+  }
+
+  window.umedComponents.showProgress = showProgress;
 })();

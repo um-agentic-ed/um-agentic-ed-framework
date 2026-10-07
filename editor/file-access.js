@@ -20,10 +20,10 @@
   //   directory listing) can surface as "not found" even though the file genuinely exists.
   // Retrying is only safe where re-resolving the full path and redoing the read/write/traversal
   // is idempotent, which is true everywhere below. Callers that use NotFoundError to mean
-  // "legitimately doesn't exist" (getExistingFile, directoryExists, listFiles, getSubdirectory,
-  // the destination-already-exists check in copyDirectory) still get that exact contract: they
-  // only conclude "doesn't exist" once every retry has also seen NotFoundError, so a hydration
-  // delay can never be mistaken for a real absence.
+  // "legitimately doesn't exist" (getExistingFile, listFiles, and getSubdirectory) still get that
+  // exact contract: they only conclude "doesn't exist" once every retry has also seen
+  // NotFoundError, so a hydration delay can never be mistaken for a real absence. Directory
+  // collision checks instead enumerate a known parent successfully, making absence unambiguous.
   function isStaleInterfaceStateError(error) {
     return Boolean(error && /state cached in an interface object.*changed since it was read from disk/i.test(error.message || ""));
   }
@@ -346,7 +346,7 @@
     await deleteFile(rootHandle, sourcePath);
   }
 
-  async function getDirectory(rootHandle, relativePath, maxAttempts = BULK_ATTEMPTS, quiet = false) {
+  async function getDirectory(rootHandle, relativePath, maxAttempts = BULK_ATTEMPTS) {
     const segments = relativePath.split("/").filter(Boolean);
     return withRetry(async () => {
       let dirHandle = rootHandle;
@@ -354,21 +354,28 @@
         dirHandle = await dirHandle.getDirectoryHandle(segment);
       }
       return dirHandle;
-    }, maxAttempts, quiet ? undefined : `getDirectory ${relativePath}`);
+    }, maxAttempts, `getDirectory ${relativePath}`);
   }
 
-  // A fast probe (e.g. splitSection confirming its new Section folder doesn't already exist):
-  // most calls legitimately resolve to "doesn't exist" quickly, so this intentionally uses the
-  // short PROBE_ATTEMPTS budget (and stays quiet) rather than getDirectory's default, logged,
-  // bulk-operation behavior.
+  // Checks for a child by successfully enumerating its known parent rather than trying to open
+  // the child and treating NotFoundError as an ambiguous result. A genuinely absent child now
+  // returns immediately, while a transient failure resolving or listing the parent still gets the
+  // normal probe retries. This matters for splitSection, which performs this check once for the
+  // new Section and once for every Slide destination.
   async function directoryExists(rootHandle, relativePath) {
-    try {
-      await getDirectory(rootHandle, relativePath, PROBE_ATTEMPTS, true);
-      return true;
-    } catch (error) {
-      if (error && error.name === "NotFoundError") return false;
-      throw error;
-    }
+    const segments = relativePath.split("/").filter(Boolean);
+    const targetName = segments.pop();
+    if (!targetName) return true;
+    return withRetry(async () => {
+      let parentHandle = rootHandle;
+      for (const segment of segments) {
+        parentHandle = await parentHandle.getDirectoryHandle(segment);
+      }
+      for await (const entry of parentHandle.values()) {
+        if (entry.kind === "directory" && entry.name === targetName) return true;
+      }
+      return false;
+    }, PROBE_ATTEMPTS);
   }
 
   async function copyDirectoryContents(sourceHandle, targetHandle, pathLabel) {
@@ -392,17 +399,13 @@
   // File System Access has no rename/move primitive. Copy first, preserving every Section asset
   // and support file, and leave the source untouched until the caller has completed its updates.
   async function copyDirectory(rootHandle, sourcePath, destinationPath) {
-    console.info(`[umedEditorFS] copyDirectory: ${sourcePath} -> ${destinationPath}`);
     const sourceHandle = await getDirectory(rootHandle, sourcePath);
     const destinationSegments = destinationPath.split("/").filter(Boolean);
     const destinationName = destinationSegments.pop();
-    const destinationParent = await getDirectory(rootHandle, destinationSegments.join("/"));
-    try {
-      await withRetry(() => destinationParent.getDirectoryHandle(destinationName), PROBE_ATTEMPTS);
+    if (await directoryExists(rootHandle, destinationPath)) {
       throw new Error(`Destination folder "${destinationPath}" already exists.`);
-    } catch (error) {
-      if (!error || error.name !== "NotFoundError") throw error;
     }
+    const destinationParent = await getDirectory(rootHandle, destinationSegments.join("/"));
     const destinationHandle = await destinationParent.getDirectoryHandle(destinationName, { create: true });
     await copyDirectoryContents(sourceHandle, destinationHandle, destinationPath);
   }

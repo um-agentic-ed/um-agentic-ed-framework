@@ -2143,7 +2143,8 @@
     const initialData = { uuid, schemaVersion: 2, title, content: { blocks: [{ type: "text", markdown: "" }] } };
     try {
       const warning = await window.umedEditor.splitSection(
-        subject.id, category.id, section.id, id, initialData, movedSlides.map(slide => slide.id)
+        subject.id, category.id, section.id, id, initialData,
+        movedSlides.map(slide => ({ id: slide.id, title: slide.title }))
       );
       if (warning) alert(warning);
     } catch (error) {

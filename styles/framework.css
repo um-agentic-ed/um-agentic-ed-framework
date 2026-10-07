@@ -1056,6 +1056,10 @@ body.presenter-mode .slide-content .gpt-followups h2 { font-size: 1.1em; }
 .confirm-dialog-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .6rem; }
 .confirm-dialog-actions button { padding: .45rem .9rem; color: var(--umed-brand-accent); background: #fff; border: 1px solid #9ba7b1; border-radius: 4px; }
 .confirm-dialog-confirm { color: #fff; background: #b3261e; border-color: #b3261e; }
+.progress-dialog { box-sizing: border-box; width: 32rem; height: 11rem; max-width: calc(100vw - 2rem); max-height: calc(100vh - 2rem); }
+.progress-dialog-title { margin: 0 0 .75rem; font-size: 1.15rem; }
+.progress-dialog .confirm-dialog-message { height: 4.5rem; margin-bottom: .8rem; overflow: auto; }
+.progress-dialog-meter { display: block; width: 100%; }
 
 /* ==========================================================================
    11. Search results and utilities

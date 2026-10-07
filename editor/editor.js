@@ -1741,11 +1741,11 @@
   // folders (with their assets and widgets) from the current Section into it, and saves the
   // manifest that main.js has already mutated in memory. As in moveSection, originals are removed
   // only after the manifest is saved, and a partial copy is removed if anything fails first.
-  async function splitSection(subjectId, categoryId, fromSectionId, newSectionId, landingData, movedSlideIds) {
+  async function splitSection(subjectId, categoryId, fromSectionId, newSectionId, landingData, movedSlides) {
     if (!window.umedEditorFS) throw new Error("File system access is unavailable.");
     const oldPrefix = `${subjectId}/${categoryId}/${fromSectionId}`;
     const newPrefix = `${subjectId}/${categoryId}/${newSectionId}`;
-    if (movedSlideIds.some(slideId => dirtyKeys.has(`${oldPrefix}/${slideId}`))) {
+    if (movedSlides.some(slide => dirtyKeys.has(`${oldPrefix}/${slide.id}`))) {
       throw new Error("Save or discard changes to the Slides being moved before adding a section break.");
     }
     const rootHandle = await window.umedEditorFS.getContentRootHandle();
@@ -1760,35 +1760,54 @@
     // moving into a longer Section name can push already-borderline paths over the edge. Without
     // this, the same failure only surfaces after a long, confusing retry-then-fail during the
     // real copy below.
-    const prospectivePaths = [];
-    for (const slideId of movedSlideIds) {
-      const suffixes = await window.umedEditorFS.listFilesRecursive(rootHandle, `${oldPrefix}/${slideId}`);
-      for (const suffix of suffixes) prospectivePaths.push(`${newPrefix}/${slideId}/${suffix}`);
-    }
-    await window.umedEditorFS.checkPathBudget(rootHandle, prospectivePaths);
-
+    const totalSteps = movedSlides.length * 3 + 2;
+    let completedSteps = 0;
+    const progress = window.umedComponents && window.umedComponents.showProgress
+      ? window.umedComponents.showProgress(
+          "Adding Section Break",
+          movedSlides.length ? `Checking Slide 1 of ${movedSlides.length}\u2026` : "Creating the new Section\u2026",
+          { max: totalSteps }
+        )
+      : null;
+    const updateProgress = message => progress && progress.update({ message, value: completedSteps });
     try {
-      console.info(`[splitSection] Writing landing file for new Section "${newPrefix}" (moving ${movedSlideIds.length} Slide(s): ${movedSlideIds.join(", ")})`);
-      await window.umedEditorFS.writeTextFile(rootHandle, `${newPrefix}/section.js`, serializeContentFile({ kind: "overview", key: newPrefix }, landingData));
-      for (const slideId of movedSlideIds) {
-        console.info(`[splitSection] Copying Slide "${slideId}" from "${oldPrefix}" to "${newPrefix}"`);
-        await window.umedEditorFS.copyDirectory(rootHandle, `${oldPrefix}/${slideId}`, `${newPrefix}/${slideId}`);
-        console.info(`[splitSection] Rewriting content key for Slide "${slideId}" in its new location`);
-        await window.umedEditorFS.replaceTextInJavaScriptFiles(rootHandle, `${newPrefix}/${slideId}`, `${oldPrefix}/${slideId}`, `${newPrefix}/${slideId}`);
+      const prospectivePaths = [];
+      for (let index = 0; index < movedSlides.length; index += 1) {
+        const slide = movedSlides[index];
+        updateProgress(`Checking Slide ${index + 1} of ${movedSlides.length}: ${slide.title}`);
+        const suffixes = await window.umedEditorFS.listFilesRecursive(rootHandle, `${oldPrefix}/${slide.id}`);
+        for (const suffix of suffixes) prospectivePaths.push(`${newPrefix}/${slide.id}/${suffix}`);
+        completedSteps += 1;
       }
-      console.info(`[splitSection] All Slides copied; writing content-index.js`);
+      await window.umedEditorFS.checkPathBudget(rootHandle, prospectivePaths);
+
+      updateProgress("Creating the new Section\u2026");
+      await window.umedEditorFS.writeTextFile(rootHandle, `${newPrefix}/section.js`, serializeContentFile({ kind: "overview", key: newPrefix }, landingData));
+      completedSteps += 1;
+      for (let index = 0; index < movedSlides.length; index += 1) {
+        const slide = movedSlides[index];
+        updateProgress(`Moving Slide ${index + 1} of ${movedSlides.length}: ${slide.title}`);
+        await window.umedEditorFS.copyDirectory(rootHandle, `${oldPrefix}/${slide.id}`, `${newPrefix}/${slide.id}`);
+        await window.umedEditorFS.replaceTextInJavaScriptFiles(rootHandle, `${newPrefix}/${slide.id}`, `${oldPrefix}/${slide.id}`, `${newPrefix}/${slide.id}`);
+        completedSteps += 1;
+      }
+      updateProgress("Saving the updated content index\u2026");
       await writeIndexFile(rootHandle);
-      console.info(`[splitSection] Done.`);
+      completedSteps += 1;
     } catch (error) {
       console.error(`[splitSection] FAILED: ${error && error.name}: ${error && error.message}`, error);
+      updateProgress("The operation failed. Cleaning up the incomplete Section\u2026");
       try { await window.umedEditorFS.deleteDirectory(rootHandle, newPrefix); } catch (cleanupError) { console.error(cleanupError); }
+      if (progress) progress.close();
       throw error;
     }
 
     window.umedAppContent[newPrefix] = landingData;
     const failedRemovals = [];
-    for (const slideId of movedSlideIds) {
-      const oldKey = `${oldPrefix}/${slideId}`;
+    for (let index = 0; index < movedSlides.length; index += 1) {
+      const slide = movedSlides[index];
+      const oldKey = `${oldPrefix}/${slide.id}`;
+      updateProgress(`Removing original Slide ${index + 1} of ${movedSlides.length}: ${slide.title}`);
       delete window.umedAppContent[oldKey];
       savedSnapshots.delete(oldKey);
       contentInfoByKey.delete(oldKey);
@@ -1798,7 +1817,9 @@
         console.error(error);
         failedRemovals.push(oldKey);
       }
+      completedSteps += 1;
     }
+    if (progress) progress.close();
     return failedRemovals.length
       ? `The Section was split, but these original Slide folders could not be removed: ${failedRemovals.join(", ")}. Remove the duplicates after verifying the new Section.`
       : null;
