@@ -2035,7 +2035,7 @@
 
   // New Slide paths should be short but recognizable. Ignore common function words and retain at
   // most three meaningful words from the title; the Editor can always replace this suggestion.
-  function slideNameFromTitle(title) {
+  function slideNameFromTitle(title, sectionBreak) {
     const trivialWords = new Set([
       "a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "how", "in", "into",
       "is", "it", "its", "of", "on", "or", "the", "to", "was", "were", "what", "when", "where",
@@ -2044,7 +2044,75 @@
     ]);
     const words = (title || "").toLowerCase().match(/[a-z0-9]+/g) || [];
     const meaningfulWords = words.filter(word => !trivialWords.has(word)).slice(0, 3);
-    return meaningfulWords.join("-") || "slide";
+    return meaningfulWords.join("-") || (sectionBreak ? "section" : "slide");
+  }
+
+  // Splits the viewed Section at a Slides menu insertion point. The new Section (whose landing
+  // slide is the Slide the Editor named in the dialog) is inserted right after the current one in
+  // its Category, and every Slide at or after the insertion point, across Levels, moves into it
+  // with its Level and order intact; earlier Slides stay put.
+  async function splitSectionAtPosition(target, level, insertAtInLevel, details) {
+    const { subject, category, section } = target;
+    const title = details.title;
+    const id = uniqueId(details.name, category.sections.map(item => item.id));
+    let uuid;
+    try {
+      uuid = createUuid();
+    } catch (error) {
+      alert(error.message);
+      return;
+    }
+    if (!window.umedEditor || typeof window.umedEditor.splitSection !== "function") {
+      alert("Adding a section break requires Editor Mode file access.");
+      return;
+    }
+
+    const levelIndex = LEVELS.indexOf(level);
+    const slidesInLevelOrder = LEVELS.flatMap(item => sorted(section.slides.filter(slide => slide.level === item)));
+    const slidesBeforeLevel = LEVELS.slice(0, levelIndex)
+      .reduce((count, item) => count + section.slides.filter(slide => slide.level === item).length, 0);
+    const slidesInLevel = section.slides.filter(slide => slide.level === level).length;
+    const breakIndex = slidesBeforeLevel + Math.max(0, Math.min(insertAtInLevel, slidesInLevel));
+    const movedSlides = slidesInLevelOrder.slice(breakIndex);
+
+    const slidesBefore = section.slides;
+    const sectionOrdersBefore = category.sections.map(item => [item, item.order]);
+    const expandedBefore = expandedCategoryId;
+    const newSection = { id, uuid, title, order: 0, slides: movedSlides };
+
+    section.slides = slidesInLevelOrder.slice(0, breakIndex);
+    category.sections.push(newSection);
+    const siblings = sorted(category.sections.filter(item => item.id !== id));
+    const insertIndex = siblings.indexOf(section) + 1;
+    const assignedOrder = computeOrderForInsertion(siblings, insertIndex);
+    if (assignedOrder !== null) newSection.order = assignedOrder;
+    else {
+      siblings.splice(insertIndex, 0, newSection);
+      rerankSiblings(siblings);
+    }
+
+    const initialData = { uuid, schemaVersion: 2, title, content: { blocks: [{ type: "text", markdown: "" }] } };
+    try {
+      const warning = await window.umedEditor.splitSection(
+        subject.id, category.id, section.id, id, initialData, movedSlides.map(slide => slide.id)
+      );
+      if (warning) alert(warning);
+    } catch (error) {
+      section.slides = slidesBefore;
+      category.sections = category.sections.filter(item => item !== newSection);
+      for (const [item, order] of sectionOrdersBefore) item.order = order;
+      expandedCategoryId = expandedBefore;
+      renderSidebar();
+      renderMenu(target);
+      console.error(error);
+      alert(`Could not add the section break: ${error.message}`);
+      return;
+    }
+
+    expandedCategoryId = category.id;
+    rebuildSearchIndex();
+    renderSidebar();
+    location.hash = `#/${subject.id}/${category.id}/${id}`;
   }
 
   // Creates a new Slide at the given Level/position from the Slides menu's "+" button. Every
@@ -2054,10 +2122,15 @@
       ? await window.umedComponents.promptNewSlide({
         message: "Add a new Slide",
         confirmLabel: "Add Slide",
+        allowSectionBreak: true,
         nameFromTitle: slideNameFromTitle
       })
       : null;
     if (!slideDetails) return;
+    if (slideDetails.sectionBreak) {
+      await splitSectionAtPosition(target, level, insertAtInLevel, slideDetails);
+      return;
+    }
     const title = slideDetails.title;
     // Preserve the Editor's chosen name as the Slide id, while ensuring it is a safe kebab-case
     // folder name and doesn't collide with an existing Slide in this Section.

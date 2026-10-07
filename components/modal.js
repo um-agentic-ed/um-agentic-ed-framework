@@ -172,20 +172,26 @@
 
     const titleLabel = document.createElement("label");
     titleLabel.className = "prompt-dialog-label";
-    titleLabel.textContent = "Slide title";
+    const titleText = document.createElement("span");
     const titleInput = document.createElement("input");
     titleInput.type = "text";
     titleInput.className = "prompt-dialog-input";
-    titleLabel.append(titleInput);
+    titleLabel.append(titleText, titleInput);
 
     const nameLabel = document.createElement("label");
     nameLabel.className = "prompt-dialog-label";
-    nameLabel.textContent = "Slide name (used in paths and folder names)";
+    const nameText = document.createElement("span");
     const nameInput = document.createElement("input");
     nameInput.type = "text";
     nameInput.className = "prompt-dialog-input";
     nameInput.autocomplete = "off";
-    nameLabel.append(nameInput);
+    nameLabel.append(nameText, nameInput);
+
+    const sectionBreakLabel = document.createElement("label");
+    sectionBreakLabel.className = "prompt-dialog-checkbox";
+    const sectionBreakInput = document.createElement("input");
+    sectionBreakInput.type = "checkbox";
+    sectionBreakLabel.append(sectionBreakInput, " Create a new section break with this slide");
 
     const actions = document.createElement("div");
     actions.className = "confirm-dialog-actions";
@@ -197,36 +203,61 @@
     confirmButton.className = "confirm-dialog-confirm";
     actions.append(cancelButton, confirmButton);
 
-    slidePromptDialog.append(message, titleLabel, nameLabel, actions);
+    slidePromptDialog.append(message, titleLabel, nameLabel, sectionBreakLabel, actions);
     document.body.append(slidePromptDialog);
     slidePromptDialog._message = message;
+    slidePromptDialog._titleText = titleText;
     slidePromptDialog._titleInput = titleInput;
+    slidePromptDialog._nameText = nameText;
     slidePromptDialog._nameInput = nameInput;
+    slidePromptDialog._sectionBreakLabel = sectionBreakLabel;
+    slidePromptDialog._sectionBreakInput = sectionBreakInput;
     slidePromptDialog._cancelButton = cancelButton;
     slidePromptDialog._confirmButton = confirmButton;
     return slidePromptDialog;
   }
 
-  // Returns { title, name }, or null if dismissed or either required field is blank. `nameFromTitle`
-  // supplies the concise kebab-case suggestion while the user is still editing the title.
+  // Returns { title, name, sectionBreak }, or null if dismissed or either required field is blank.
+  // `nameFromTitle(title, sectionBreak)` supplies the concise kebab-case suggestion while the user
+  // is still editing the title. The "section break" checkbox starts unchecked on every open and
+  // relabels the whole dialog from "Slide" to "Section"; it is only offered when
+  // `opts.allowSectionBreak` is true.
   function promptNewSlide(options) {
     const opts = options || {};
     const modal = ensureSlidePromptDialog();
     let nameWasEdited = false;
-    modal._message.textContent = opts.message || "Add a new Slide";
     modal._titleInput.value = "";
     modal._nameInput.value = "";
+    modal._sectionBreakInput.checked = false;
+    modal._sectionBreakLabel.hidden = !opts.allowSectionBreak;
     modal._cancelButton.textContent = opts.cancelLabel || "Cancel";
-    modal._confirmButton.textContent = opts.confirmLabel || "Add Slide";
+
+    const applyLabels = () => {
+      const noun = modal._sectionBreakInput.checked ? "Section" : "Slide";
+      modal._message.textContent = modal._sectionBreakInput.checked ? "Add a new Section Break" : (opts.message || "Add a new Slide");
+      modal._titleText.textContent = `${noun} title`;
+      modal._nameText.textContent = `${noun} name (used in paths and folder names)`;
+      modal._confirmButton.textContent = modal._sectionBreakInput.checked ? "Add Section Break" : (opts.confirmLabel || "Add Slide");
+    };
+    applyLabels();
 
     return new Promise(resolve => {
       const suggestName = () => {
-        if (!nameWasEdited) modal._nameInput.value = opts.nameFromTitle ? opts.nameFromTitle(modal._titleInput.value) : "";
+        if (!nameWasEdited) {
+          modal._nameInput.value = opts.nameFromTitle
+            ? opts.nameFromTitle(modal._titleInput.value, modal._sectionBreakInput.checked)
+            : "";
+        }
+      };
+      const onSectionBreakChange = () => {
+        applyLabels();
+        suggestName();
       };
       const cleanup = result => {
         modal._confirmButton.removeEventListener("click", onConfirm);
         modal._cancelButton.removeEventListener("click", onCancel);
         modal.removeEventListener("close", onClose);
+        modal._sectionBreakInput.removeEventListener("change", onSectionBreakChange);
         modal._titleInput.removeEventListener("input", suggestName);
         modal._nameInput.removeEventListener("input", onNameInput);
         modal._titleInput.removeEventListener("keydown", onKeydown);
@@ -245,7 +276,7 @@
           modal._nameInput.focus();
           return;
         }
-        cleanup({ title, name });
+        cleanup({ title, name, sectionBreak: !modal._sectionBreakLabel.hidden && modal._sectionBreakInput.checked });
       };
       const onCancel = () => cleanup(null);
       const onClose = () => cleanup(null);
@@ -255,6 +286,7 @@
       modal._confirmButton.addEventListener("click", onConfirm);
       modal._cancelButton.addEventListener("click", onCancel);
       modal.addEventListener("close", onClose);
+      modal._sectionBreakInput.addEventListener("change", onSectionBreakChange);
       modal._titleInput.addEventListener("input", suggestName);
       modal._nameInput.addEventListener("input", onNameInput);
       modal._titleInput.addEventListener("keydown", onKeydown);

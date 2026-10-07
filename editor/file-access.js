@@ -22,6 +22,31 @@
     return new Promise(resolve => setTimeout(resolve, 50 * (attempt + 1)));
   }
 
+  // Bulk directory copies (moveSection, splitSection) walk and read many files in one pass. The
+  // same Dropbox-sync raciness that motivates isStaleInterfaceStateError can also surface as a
+  // bare NotFoundError here, when an entry yielded by `values()` is briefly unreadable or a
+  // directory segment is mid-sync. Retrying is safe because every retry re-lists/re-resolves
+  // handles and re-copies idempotently (same bytes overwrite the same destination). This is
+  // deliberately narrower than a blanket NotFoundError retry: call sites that use NotFoundError
+  // to mean "this legitimately doesn't exist" (getExistingFile, directoryExists, listFiles, the
+  // destination-already-exists check in copyDirectory) must keep treating it as expected, not
+  // transient.
+  function isTransientCopyError(error) {
+    return isStaleInterfaceStateError(error) || Boolean(error && error.name === "NotFoundError");
+  }
+
+  async function withCopyRetry(operation) {
+    const maxAttempts = 3;
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      try {
+        return await operation();
+      } catch (error) {
+        if (!isTransientCopyError(error) || attempt === maxAttempts - 1) throw error;
+        await retryDelay(attempt);
+      }
+    }
+  }
+
   // All mutations share one queue. Several Editor workflows update content-index.js in addition
   // to their primary file, and without coordination two otherwise valid UI actions can overlap
   // those writes and invalidate one another's browser-side filesystem state.
@@ -168,14 +193,24 @@
     }
   }
 
+  // Idempotent and retried: a cleanup delete (e.g. rolling back a failed splitSection/moveSection
+  // copy) can race the same Dropbox-sync staleness as the copy it's undoing, and a target that's
+  // already gone (from a prior partial cleanup attempt) should count as success, not failure.
   async function deleteDirectory(rootHandle, relativePath) {
     const segments = relativePath.split("/");
     const targetName = segments.pop();
-    let dirHandle = rootHandle;
-    for (const segment of segments) {
-      dirHandle = await dirHandle.getDirectoryHandle(segment);
-    }
-    await dirHandle.removeEntry(targetName, { recursive: true });
+    await withCopyRetry(async () => {
+      let dirHandle = rootHandle;
+      for (const segment of segments) {
+        dirHandle = await dirHandle.getDirectoryHandle(segment);
+      }
+      try {
+        await dirHandle.removeEntry(targetName, { recursive: true });
+      } catch (error) {
+        if (error && error.name === "NotFoundError") return;
+        throw error;
+      }
+    });
   }
 
   // Removes one file without affecting sibling trusted sources or other Section assets.
@@ -216,26 +251,41 @@
   }
 
   async function getDirectory(rootHandle, relativePath) {
-    let dirHandle = rootHandle;
-    for (const segment of relativePath.split("/").filter(Boolean)) {
-      dirHandle = await dirHandle.getDirectoryHandle(segment);
+    const segments = relativePath.split("/").filter(Boolean);
+    return withCopyRetry(async () => {
+      let dirHandle = rootHandle;
+      for (const segment of segments) {
+        dirHandle = await dirHandle.getDirectoryHandle(segment);
+      }
+      return dirHandle;
+    });
+  }
+
+  async function directoryExists(rootHandle, relativePath) {
+    try {
+      await getDirectory(rootHandle, relativePath);
+      return true;
+    } catch (error) {
+      if (error && error.name === "NotFoundError") return false;
+      throw error;
     }
-    return dirHandle;
   }
 
   async function copyDirectoryContents(sourceHandle, targetHandle) {
-    for await (const entry of sourceHandle.values()) {
-      if (entry.kind === "file") {
-        const file = await entry.getFile();
-        const targetFile = await targetHandle.getFileHandle(entry.name, { create: true });
-        const writable = await targetFile.createWritable();
-        await writable.write(file);
-        await writable.close();
-      } else if (entry.kind === "directory") {
-        const targetDirectory = await targetHandle.getDirectoryHandle(entry.name, { create: true });
-        await copyDirectoryContents(entry, targetDirectory);
+    await withCopyRetry(async () => {
+      for await (const entry of sourceHandle.values()) {
+        if (entry.kind === "file") {
+          const file = await entry.getFile();
+          const targetFile = await targetHandle.getFileHandle(entry.name, { create: true });
+          const writable = await targetFile.createWritable();
+          await writable.write(file);
+          await writable.close();
+        } else if (entry.kind === "directory") {
+          const targetDirectory = await targetHandle.getDirectoryHandle(entry.name, { create: true });
+          await copyDirectoryContents(entry, targetDirectory);
+        }
       }
-    }
+    });
   }
 
   // File System Access has no rename/move primitive. Copy first, preserving every Section asset
@@ -260,19 +310,21 @@
   async function replaceTextInJavaScriptFiles(rootHandle, relativePath, searchText, replacementText) {
     const directory = await getDirectory(rootHandle, relativePath);
     async function visit(dirHandle) {
-      for await (const entry of dirHandle.values()) {
-        if (entry.kind === "directory") {
-          await visit(entry);
-          continue;
+      await withCopyRetry(async () => {
+        for await (const entry of dirHandle.values()) {
+          if (entry.kind === "directory") {
+            await visit(entry);
+            continue;
+          }
+          if (!entry.name.endsWith(".js")) continue;
+          const file = await entry.getFile();
+          const text = await file.text();
+          if (!text.includes(searchText)) continue;
+          const writable = await entry.createWritable();
+          await writable.write(text.split(searchText).join(replacementText));
+          await writable.close();
         }
-        if (!entry.name.endsWith(".js")) continue;
-        const file = await entry.getFile();
-        const text = await file.text();
-        if (!text.includes(searchText)) continue;
-        const writable = await entry.createWritable();
-        await writable.write(text.split(searchText).join(replacementText));
-        await writable.close();
-      }
+      });
     }
     await visit(directory);
   }
@@ -286,6 +338,7 @@
     writeTextFile: (...args) => enqueueMutation(() => writeFile(...args)),
     writeBinaryFile: (...args) => enqueueMutation(() => writeFile(...args)),
     getExistingFile,
+    directoryExists,
     listFiles,
     moveFile: (...args) => enqueueMutation(() => moveFile(...args)),
     deleteFile: (...args) => enqueueMutation(() => deleteFile(...args)),

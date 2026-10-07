@@ -1729,6 +1729,55 @@
     await writeIndexFile(rootHandle);
   }
 
+  // Splits a Section at a Slides menu insertion point: creates the new Section's section.js
+  // landing file (from the Slide dialog's "section break" option), moves the given Slides'
+  // folders (with their assets and widgets) from the current Section into it, and saves the
+  // manifest that main.js has already mutated in memory. As in moveSection, originals are removed
+  // only after the manifest is saved, and a partial copy is removed if anything fails first.
+  async function splitSection(subjectId, categoryId, fromSectionId, newSectionId, landingData, movedSlideIds) {
+    if (!window.umedEditorFS) throw new Error("File system access is unavailable.");
+    const oldPrefix = `${subjectId}/${categoryId}/${fromSectionId}`;
+    const newPrefix = `${subjectId}/${categoryId}/${newSectionId}`;
+    if (movedSlideIds.some(slideId => dirtyKeys.has(`${oldPrefix}/${slideId}`))) {
+      throw new Error("Save or discard changes to the Slides being moved before adding a section break.");
+    }
+    const rootHandle = await window.umedEditorFS.getContentRootHandle();
+    if (!rootHandle) throw new Error("Folder access was cancelled.");
+    if (await window.umedEditorFS.directoryExists(rootHandle, newPrefix)) {
+      throw new Error(`Folder "${newPrefix}" already exists.`);
+    }
+
+    try {
+      await window.umedEditorFS.writeTextFile(rootHandle, `${newPrefix}/section.js`, serializeContentFile({ kind: "overview", key: newPrefix }, landingData));
+      for (const slideId of movedSlideIds) {
+        await window.umedEditorFS.copyDirectory(rootHandle, `${oldPrefix}/${slideId}`, `${newPrefix}/${slideId}`);
+        await window.umedEditorFS.replaceTextInJavaScriptFiles(rootHandle, `${newPrefix}/${slideId}`, `${oldPrefix}/${slideId}`, `${newPrefix}/${slideId}`);
+      }
+      await writeIndexFile(rootHandle);
+    } catch (error) {
+      try { await window.umedEditorFS.deleteDirectory(rootHandle, newPrefix); } catch (cleanupError) { console.error(cleanupError); }
+      throw error;
+    }
+
+    window.umedAppContent[newPrefix] = landingData;
+    const failedRemovals = [];
+    for (const slideId of movedSlideIds) {
+      const oldKey = `${oldPrefix}/${slideId}`;
+      delete window.umedAppContent[oldKey];
+      savedSnapshots.delete(oldKey);
+      contentInfoByKey.delete(oldKey);
+      try {
+        await window.umedEditorFS.deleteDirectory(rootHandle, oldKey);
+      } catch (error) {
+        console.error(error);
+        failedRemovals.push(oldKey);
+      }
+    }
+    return failedRemovals.length
+      ? `The Section was split, but these original Slide folders could not be removed: ${failedRemovals.join(", ")}. Remove the duplicates after verifying the new Section.`
+      : null;
+  }
+
   async function persistContent(rootHandle, info) {
     const data = window.umedAppContent[info.key];
     if (!data) throw new Error(`Content is unavailable for ${info.key}.`);
@@ -1933,7 +1982,7 @@
   // Read-only-from-main.js's-perspective hook so the Slides menu's and sidebar's drag-and-drop
   // reordering and "+" add buttons can persist changes without duplicating file-serialization
   // logic.
-  window.umedEditor = { persistSlideOrder, createSlide, persistIndex, createSubject, createCategory, createSection, moveSection };
+  window.umedEditor = { persistSlideOrder, createSlide, persistIndex, createSubject, createCategory, createSection, moveSection, splitSection };
 
   if (window.umedApp && typeof window.umedApp.getCurrentSlideInfo === "function") {
     current = window.umedApp.getCurrentSlideInfo();

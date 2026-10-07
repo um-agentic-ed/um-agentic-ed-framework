@@ -1051,6 +1051,8 @@ body.presenter-mode .slide-content .gpt-followups h2 { font-size: 1.1em; }
 .confirm-dialog-message { margin: 0 0 1.25rem; white-space: pre-line; }
 .prompt-dialog-input { width: 100%; margin-bottom: 1.25rem; padding: .45rem .6rem; border: 1px solid #c8cdd2; border-radius: 4px; }
 .prompt-dialog-label { display: block; margin-bottom: .3rem; font-size: .9rem; }
+.prompt-dialog-checkbox { display: block; margin-bottom: 1.25rem; font-size: .9rem; }
+.prompt-dialog-checkbox[hidden] { display: none; }
 .confirm-dialog-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .6rem; }
 .confirm-dialog-actions button { padding: .45rem .9rem; color: var(--umed-brand-accent); background: #fff; border: 1px solid #9ba7b1; border-radius: 4px; }
 .confirm-dialog-confirm { color: #fff; background: #b3261e; border-color: #b3261e; }

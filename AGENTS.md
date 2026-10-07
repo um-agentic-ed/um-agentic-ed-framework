@@ -628,6 +628,16 @@ window.umedAppContentIndex = {
   reorder, or deletes a Slide, the app must update both the Slide's `slide.js` 
   file and `content-index.js` together via the File System Access API, so the 
   two stay in sync.
+- In Editor Mode, the Slides menu's hover "+" button opens a dialog for the new
+  Slide's title and name. Its "Create a new section break with this slide"
+  checkbox (unchecked by default) relabels the dialog for a Section. When
+  approved with "Add Section Break", the Slide becomes the `section.js` landing
+  Slide of a new Section placed right after the current Section in its Category;
+  every Slide at or after the "+" position (across Levels) moves into the new
+  Section with its Level and order unchanged, and earlier Slides stay. Moved Slide
+  folders are copied with their content keys rewritten, `content-index.js` is
+  saved, and only then are the original folders removed. Slides with unsaved
+  changes must be saved or discarded first.
 - `content-index.js` is not hand-maintained independently of Slide files; it
   is always a generated reflection of them.
 
