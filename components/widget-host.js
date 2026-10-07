@@ -42,6 +42,12 @@
       activeWidgets.push(typeof destroy === "function" ? destroy : () => {});
     };
 
+    // Single-file exports preload widget registrations inline because their original content-file
+    // paths do not exist beside the exported HTML. Start an already registered widget directly.
+    if (window.umedAppWidgets[key]) {
+      start();
+      return;
+    }
     if (loadedScripts.has(src)) {
       start();
       return;

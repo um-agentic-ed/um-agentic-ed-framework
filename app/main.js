@@ -59,13 +59,33 @@
   }
 
   let whiteboardScriptsPromise = null;
+  function loadWhiteboardComponent() {
+    if (window.umedPresenterWhiteboard) return Promise.resolve();
+    if (!window.umedSingleFileExport) return loadScript(`${FRAMEWORK_URL}components/presenter-whiteboard.js`);
+    const source = window.umedEmbeddedWhiteboardSource;
+    if (typeof source !== "string" || !source) {
+      return Promise.reject(new Error("The exported Learner sketchpad component is unavailable."));
+    }
+    return new Promise((resolve, reject) => {
+      try {
+        const script = document.createElement("script");
+        script.textContent = source;
+        document.head.append(script);
+        if (!window.umedPresenterWhiteboard) throw new Error("The Learner sketchpad did not initialize.");
+        resolve();
+      } catch (error) {
+        reject(error);
+      }
+    });
+  }
+
   function loadWhiteboardScripts() {
     if (!whiteboardScriptsPromise) {
       // The whiteboard reports its own "drawing tools could not be loaded" message if Fabric.js is
       // unavailable, so a Fabric failure is not fatal here.
       whiteboardScriptsPromise = Promise.all([
         loadFabricScript().catch(error => console.warn(error)),
-        loadScript(`${FRAMEWORK_URL}components/presenter-whiteboard.js`)
+        loadWhiteboardComponent()
       ]).catch(error => {
         whiteboardScriptsPromise = null;
         throw error;
@@ -1525,6 +1545,7 @@
   }
 
   function renderTrustedSources(blocks, parent, sectionKey) {
+    if (window.umedSingleFileExport) return;
     const browserViewableExtensions = new Set([
       "avif", "bmp", "csv", "gif", "htm", "html", "jpeg", "jpg", "json", "md", "pdf",
       "png", "svg", "text", "txt", "webp", "xml"
@@ -1688,7 +1709,7 @@
       elements.levels.append(button);
     });
 
-    if (!editorModeActive && !presenterModeActive && !window.umedSingleFileExport) {
+    if (!editorModeActive && !presenterModeActive) {
       const notesButton = document.createElement("button");
       notesButton.type = "button";
       notesButton.className = "notepad-button";
