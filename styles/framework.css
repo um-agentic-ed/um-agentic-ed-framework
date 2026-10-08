@@ -162,8 +162,6 @@ button { cursor: pointer; }
 .editor-refresh-button:hover, .editor-refresh-button:focus-visible { background: var(--umed-brand-hover-bg); }
 .editor-refresh-button:disabled { opacity: .5; cursor: wait; }
 .editor-refresh-button svg { display: block; width: 100%; height: 100%; }
-.single-file-export #presenter-mode-toggle,
-.single-file-export #presenter-whiteboard-toggle,
 .single-file-export #editor-pane { display: none !important; }
 .presenter-navigation { display: flex; align-items: center; justify-content: flex-end; gap: .5rem; flex: 1 1 auto; }
 .presenter-navigation[hidden] { display: none; }
@@ -491,6 +489,7 @@ body.presenter-mode .slide-content .gpt-followups h2 { font-size: 1.1em; }
   width: fit-content;
   max-width: 100%;
   margin: 0 0 1.25rem;
+  margin-top: 2.5rem;
   text-align: left;
 }
 .slide-content .image-block.block--centered { margin-left: auto; margin-right: auto; text-align: center; }
@@ -503,8 +502,10 @@ body.presenter-mode .slide-content .gpt-followups h2 { font-size: 1.1em; }
 .slide-content hr { margin: 0 0 1.25rem; }
 /* Half the between-block gap visually ties this lead-in text to the block that follows it */
 .slide-content .block-lead-markdown { margin: 0 0 .625rem; }
-.slide-content p { font-size: 1.05rem; }
-.slide-content li { font-size: 1.05rem; }
+.slide-content p,
+.slide-content li { font-size: 105%; }
+body.presenter-mode .slide-content p,
+body.presenter-mode .slide-content li { font-size: 125%; }
 .data-file-upload-button {
   display: inline-flex;
   align-items: center;
@@ -1065,6 +1066,7 @@ body.presenter-mode .slide-content .gpt-followups h2 { font-size: 1.1em; }
 .move-dialog-tree li { margin: .25rem 0; }
 .move-dialog-tree label { display: inline-flex; align-items: center; gap: .4rem; }
 .move-dialog-tree input:disabled + span { color: #868e96; }
+.move-dialog-copy { display: inline-flex; align-items: center; gap: .4rem; margin: 0 0 1.25rem; }
 .export-dialog { width: min(36rem, calc(100vw - 2rem)); max-width: none; }
 .export-dialog-title { margin: 0 0 .5rem; font-size: 1.2rem; }
 .export-dialog-tree { max-height: min(60vh, 32rem); list-style: none; padding-left: .25rem; }

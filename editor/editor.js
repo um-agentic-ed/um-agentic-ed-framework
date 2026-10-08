@@ -2036,6 +2036,9 @@
       input.checked = item.current;
       input.disabled = item.disabled;
       const text = document.createElement("span");
+      text.dataset.label = item.label;
+      text.dataset.current = String(item.current);
+      text.dataset.collision = String(item.disabled);
       text.textContent = `${item.label}${item.current ? " (current)" : item.disabled ? " (name already in use)" : ""}`;
       label.append(input, text);
       li.append(label);
@@ -2063,6 +2066,13 @@
     tree.className = "move-dialog-tree";
     const radioName = `move-destination-${Date.now()}`;
     moveDestinations(kind, path).forEach(item => appendMoveTreeItem(tree, item, radioName));
+    const copyLabel = document.createElement("label");
+    copyLabel.className = "move-dialog-copy";
+    const copyInput = document.createElement("input");
+    copyInput.type = "checkbox";
+    const copyText = document.createElement("span");
+    copyText.textContent = "Make a copy";
+    copyLabel.append(copyInput, copyText);
     const actions = document.createElement("div");
     actions.className = "confirm-dialog-actions";
     const cancel = document.createElement("button");
@@ -2072,8 +2082,23 @@
     move.type = "button";
     move.className = "confirm-dialog-confirm";
     move.textContent = `Move ${kind[0].toUpperCase()}${kind.slice(1)}`;
+    tree.querySelectorAll("input[type='radio']").forEach(input => {
+      input.dataset.moveDisabled = String(input.disabled);
+    });
+    copyInput.addEventListener("change", () => {
+      move.textContent = `${copyInput.checked ? "Copy" : "Move"} ${kind[0].toUpperCase()}${kind.slice(1)}`;
+      tree.querySelectorAll("input[type='radio']").forEach(input => {
+        input.disabled = copyInput.checked ? false : input.dataset.moveDisabled === "true";
+        const text = input.nextElementSibling;
+        if (!text) return;
+        const suffix = text.dataset.current === "true" ? " (current)"
+          : text.dataset.collision === "true" ? (copyInput.checked ? " (copy gets a new name)" : " (name already in use)")
+          : "";
+        text.textContent = `${text.dataset.label}${suffix}`;
+      });
+    });
     actions.append(cancel, move);
-    dialog.append(instructions, tree, actions);
+    dialog.append(instructions, tree, copyLabel, actions);
     document.body.append(dialog);
 
     return new Promise(resolve => {
@@ -2088,7 +2113,7 @@
       cancel.addEventListener("click", () => finish(null));
       move.addEventListener("click", () => {
         const selected = tree.querySelector(`input[name="${radioName}"]:checked`);
-        finish(selected ? selected.value.split("/") : null);
+        finish(selected ? { destination: selected.value.split("/"), copy: copyInput.checked } : null);
       });
       dialog.addEventListener("cancel", event => { event.preventDefault(); finish(null); });
       dialog.addEventListener("close", () => finish(null));
@@ -2104,6 +2129,35 @@
 
   function nextOrder(items) {
     return (items || []).reduce((maximum, item) => Math.max(maximum, Number(item.order) || 0), 0) + 10;
+  }
+
+  function uniqueCopyId(id, items) {
+    const existing = new Set((items || []).map(item => item.id));
+    if (!existing.has(id)) return id;
+    for (let number = 2; number < 10000; number += 1) {
+      const suffix = `-${number}`;
+      const candidate = `${id.slice(0, 20 - suffix.length)}${suffix}`;
+      if (!existing.has(candidate)) return candidate;
+    }
+    throw new Error(`Could not create a unique copy name for "${id}".`);
+  }
+
+  function freshUuid() {
+    if (!window.crypto || typeof window.crypto.randomUUID !== "function") {
+      throw new Error("UUID generation is unavailable in this browser.");
+    }
+    return window.crypto.randomUUID();
+  }
+
+  function renewCopiedUuids(item, kind, uuidMap) {
+    const oldUuid = item.uuid;
+    item.uuid = freshUuid();
+    if (oldUuid) uuidMap.set(oldUuid, item.uuid);
+    if (kind === "category") {
+      (item.sections || []).forEach(section => renewCopiedUuids(section, "section", uuidMap));
+    } else if (kind === "section") {
+      (item.slides || []).forEach(slide => renewCopiedUuids(slide, "slide", uuidMap));
+    }
   }
 
   function applyMoveToIndex(kind, path, destination) {
@@ -2133,6 +2187,28 @@
     target.slides.push(item);
   }
 
+  function applyCopyToIndex(kind, path, destination) {
+    let targetItems;
+    let item;
+    if (kind === "category") {
+      item = findSubjectEntry(path[0]).categories.find(category => category.id === path[1]);
+      targetItems = findSubjectEntry(destination[0]).categories;
+    } else if (kind === "section") {
+      item = findCategoryEntry(path[0], path[1]).sections.find(section => section.id === path[2]);
+      targetItems = findCategoryEntry(destination[0], destination[1]).sections;
+    } else {
+      item = findSectionEntry(path[0], path[1], path[2]).slides.find(slide => slide.id === path[3]);
+      targetItems = findSectionEntry(destination[0], destination[1], destination[2]).slides;
+    }
+    const copiedItem = JSON.parse(JSON.stringify(item));
+    copiedItem.id = uniqueCopyId(item.id, targetItems);
+    copiedItem.order = nextOrder(targetItems);
+    const uuidMap = new Map();
+    renewCopiedUuids(copiedItem, kind, uuidMap);
+    targetItems.push(copiedItem);
+    return { copiedItem, uuidMap };
+  }
+
   function remapLoadedContent(oldPrefix, newPrefix) {
     Object.keys(window.umedAppContent || {}).forEach(oldKey => {
       if (oldKey !== oldPrefix && !oldKey.startsWith(`${oldPrefix}/`)) return;
@@ -2152,15 +2228,19 @@
     });
   }
 
-  async function moveCurrentContent(kind, destination) {
+  async function moveCurrentContent(kind, destination, makeCopy = false) {
     const path = current.key.split("/");
     const parentDepth = { category: 1, section: 2, slide: 3 }[kind];
-    if (destination.join("/") === path.slice(0, parentDepth).join("/")) return null;
+    if (!makeCopy && destination.join("/") === path.slice(0, parentDepth).join("/")) return null;
     const oldPrefix = current.key;
     const itemId = path[path.length - 1];
-    const newPrefix = `${destination.join("/")}/${itemId}`;
+    const targetItems = kind === "category" ? findSubjectEntry(destination[0]).categories
+      : kind === "section" ? findCategoryEntry(destination[0], destination[1]).sections
+      : findSectionEntry(destination[0], destination[1], destination[2]).slides;
+    const destinationId = makeCopy ? uniqueCopyId(itemId, targetItems) : itemId;
+    const newPrefix = `${destination.join("/")}/${destinationId}`;
     if ([...dirtyKeys].some(key => key === oldPrefix || key.startsWith(`${oldPrefix}/`))) {
-      throw new Error(`Save or discard changes in this ${kind[0].toUpperCase()}${kind.slice(1)} before moving it.`);
+      throw new Error(`Save or discard changes in this ${kind[0].toUpperCase()}${kind.slice(1)} before ${makeCopy ? "copying" : "moving"} it.`);
     }
     if (!window.umedEditorFS) throw new Error("File system access is unavailable.");
     const rootHandle = await window.umedEditorFS.getContentRootHandle();
@@ -2170,11 +2250,11 @@
     }
 
     const noun = `${kind[0].toUpperCase()}${kind.slice(1)}`;
-    const totalSteps = 5;
+    const totalSteps = makeCopy ? 4 : 5;
     let completedSteps = 0;
     const progress = window.umedComponents && window.umedComponents.showProgress
       ? window.umedComponents.showProgress(
-          `Moving ${noun}`,
+          `${makeCopy ? "Copying" : "Moving"} ${noun}`,
           `Checking the destination for ${noun} "${itemId}"…`,
           { max: totalSteps }
         )
@@ -2193,12 +2273,21 @@
       copied = true;
       completedSteps += 1;
 
-      updateProgress(`Updating paths inside the moved ${noun}…`);
+      updateProgress(`Updating paths and identities inside the ${makeCopy ? "copied" : "moved"} ${noun}…`);
       await window.umedEditorFS.replaceTextInJavaScriptFiles(rootHandle, newPrefix, oldPrefix, newPrefix);
-      applyMoveToIndex(kind, path, destination);
+      const copyResult = makeCopy ? applyCopyToIndex(kind, path, destination) : null;
+      if (!makeCopy) applyMoveToIndex(kind, path, destination);
+      if (copyResult) {
+        for (const [oldUuid, newUuid] of copyResult.uuidMap) {
+          await window.umedEditorFS.replaceTextInJavaScriptFiles(rootHandle, newPrefix, oldUuid, newUuid);
+        }
+      }
       if (kind === "slide") {
-        const movedEntry = findSectionEntry(...destination).slides.find(slide => slide.id === itemId);
-        const data = window.umedAppContent[oldPrefix] || await loadSlideContent(oldPrefix, current.src);
+        const movedEntry = findSectionEntry(...destination).slides.find(slide => slide.id === destinationId);
+        const sourceData = window.umedAppContent[oldPrefix] || await loadSlideContent(oldPrefix, current.src);
+        const data = makeCopy ? JSON.parse(JSON.stringify(sourceData)) : sourceData;
+        data.id = destinationId;
+        data.uuid = movedEntry.uuid;
         data.level = movedEntry.level;
         data.order = movedEntry.order;
         await window.umedEditorFS.writeTextFile(
@@ -2214,7 +2303,7 @@
       completedSteps += 1;
     } catch (error) {
       restoreIndex(indexSnapshot);
-      updateProgress(`The move failed. Cleaning up the incomplete ${noun}…`);
+      updateProgress(`The ${makeCopy ? "copy" : "move"} failed. Cleaning up the incomplete ${noun}…`);
       if (copied) {
         try { await window.umedEditorFS.deleteDirectory(rootHandle, newPrefix); } catch (cleanupError) { console.error(cleanupError); }
       }
@@ -2222,6 +2311,10 @@
       throw error;
     }
 
+    if (makeCopy) {
+      if (progress) progress.close();
+      return { newPrefix, warning: null };
+    }
     remapLoadedContent(oldPrefix, newPrefix);
     updateProgress(`Removing the ${noun} from its original location…`);
     try {
@@ -2239,20 +2332,20 @@
   async function handleMove(kind, button) {
     const infoAtStart = current;
     const path = infoAtStart.key.split("/");
-    const destination = await promptMoveDestination(kind, path);
-    if (!destination || current !== infoAtStart) return;
+    const choice = await promptMoveDestination(kind, path);
+    if (!choice || current !== infoAtStart) return;
     const originalLabel = button.innerHTML;
     button.disabled = true;
     button.textContent = "…";
     try {
-      const result = await moveCurrentContent(kind, destination);
+      const result = await moveCurrentContent(kind, choice.destination, choice.copy);
       if (!result) return;
       if (result.warning) alert(result.warning);
       if (window.umedApp && typeof window.umedApp.refreshNavigation === "function") window.umedApp.refreshNavigation();
       location.hash = `#/${result.newPrefix}`;
     } catch (error) {
       console.error(error);
-      alert(`Could not move ${kind}: ${error.message}`);
+      alert(`Could not ${choice.copy ? "copy" : "move"} ${kind}: ${error.message}`);
     } finally {
       button.innerHTML = originalLabel;
       button.disabled = false;

@@ -1801,7 +1801,19 @@
   async function copyGptPrompt(followupQuestion = "") {
     // Follow-up suggestion text is rendered outside `slidePromptContent`, keeping it out of the
     // quoted teaching material sent to GPT.
-    let slideText = (slidePromptContent || elements.slide).innerText.trim();
+    const promptContent = slidePromptContent || elements.slide;
+    let slideText = promptContent.innerText.trim();
+    const subject = activeSubject();
+    const category = subject && subject.categories.find(item => item.id === activeCategoryId);
+    const section = category && category.sections.find(item => item.id === activeSectionId);
+    const slideTitle = promptContent.querySelector("h1")?.innerText.trim() || "";
+    const hierarchy = [
+      ...(subjectsEnabled && subject ? [`Subject: ${subject.title}`] : []),
+      `Category: ${category.title}`,
+      `Section: ${section.title}`,
+      `Slide: ${slideTitle}`
+    ];
+    slideText = hierarchy.join("\n") + slideText.slice(slideTitle.length);
     slideText = slideText.replace(/\n/g, "\n> ");
     const learnerLevel = identity.learnerLevel ? `${identity.learnerLevel} ` : "";
     const prompt = `I am a ${learnerLevel}learner in ${identity.discipline || "this subject"}. ` +
