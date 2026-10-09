@@ -417,6 +417,129 @@ the authoritative instructions for app structure.
 Section titles, descriptions, and other Section-level metadata not tied to
 individual Slides are stored in `content-index.js`.
 
+# Editing permissions and locks
+
+Executing Agent instructions might require you to make changes to one or more of:
+
+1. App metadata and branding files in the Parent App root folder:
+   - `AGENTS.md` sections:
+     - `# Project overview`
+     - `# Educational content generation guidelines`
+   - `app.css`
+   - `app.js`
+   - `LICENSE`
+   - `LICENSE-CC-BY-NC-4.0`
+   - `README.md`
+2. Educational content in the Parent App `src/content` folder.
+3. `um-agentic-ed` system structure files in the Parent App root folder:
+   - `.github/skills`
+   - `.gitignore`
+   - `.gitmodules`
+   - `AGENTS.md`, all sections not explicitly listed in item 1
+   - `index.html`
+4. App structure and execution code in this Framework, in folder
+   `src/um-agentic-ed-framework`.
+
+## Required permission to change app functionality
+
+User briefs that would lead to changes of type 3, `um-agentic-ed` system structure
+files, or type 4, App structure and execution code, must be confirmed with the
+user before execution with the message: "Executing this action requires changes
+to `um-agentic-ed` system code files that should only be made by system
+developers." If the proposed changes would break compatibility with existing
+Apps, the confirmation request must also say so. Continue only if the user
+actively confirms the system-altering action in advance or via your prompt.
+
+Changes of type 1, App metadata and branding files, and type 2, Educational
+content, do not require this additional confirmation because they change a
+specific App contents rather than system-defined App behavior.
+
+## Project locking during editing
+
+To prevent an Editor and an Agent controlled by that Editor from attempting to
+modify the same App at the same time, Agents and Editor Mode must use the project
+lock defined below. Editors are expected to have their own project clone and be
+the only person editing it. The lock is a cooperative safety measure against
+accidental overlapping Agent and Editor Mode operations; it is not a security
+boundary or a multi-user concurrency system.
+
+### Project lock
+
+Before changing any project file other than the lock file itself, an Agent or
+Editor Mode operation must acquire ownership of file `APP_LOCK` in the Parent
+root folder. This includes creating, writing, moving, renaming, or deleting
+content, assets, index entries, project metadata, system files, or Framework
+files. Creating, validating, and removing `APP_LOCK` as specified here are the
+only exceptions to the requirement to acquire the lock before a project
+mutation. They are also the sole exceptions to the rule that Editor Mode may
+only write inside `src/content`; the folder-access UI must disclose this
+root-level lock-file access.
+
+`APP_LOCK` must contain:
+
+- A newly generated, unguessable owner token.
+- The acquisition time as an ISO 8601 timestamp.
+- A short description of the operation.
+
+An Agent must acquire `APP_LOCK` using an operating-system-level atomic
+create-if-absent operation, not a separate existence check followed by an
+ordinary create or overwrite. If atomic creation reports that the file already
+exists, the Agent must make no project changes and must tell the user that
+another editing operation may be active.
+
+The browser File System Access API has no atomic create-if-absent operation, so
+Editor Mode cannot provide strict atomic exclusion against an Agent process.
+Editor Mode must first obtain an exclusive Web Lock, keyed by the App's
+`appUuid`, for the complete logical operation. This serializes cooperating
+Editor Mode tabs. While holding the Web Lock, it must check for an existing
+`APP_LOCK`; if one exists it must make no project changes. Otherwise it may
+create its cooperative `APP_LOCK`, then immediately reread it and verify its
+owner token before mutating the project. Editor Mode must never knowingly
+overwrite an existing lock. This protocol has an unavoidable small acquisition
+race with an Agent because of the browser API limitation, and must not be
+described as strict cross-process atomic locking. If Web Locks or an equivalent
+cross-tab exclusion mechanism is unavailable, Editor Mode must refuse project
+mutations rather than silently operate without browser-tab coordination.
+
+When acquisition fails, the existing lock information may be displayed when
+readable. A pre-existing lock is never considered stale or removed
+automatically; only an explicit user instruction may authorize its removal.
+
+The owner must retain its token for the whole operation. Whether the operation
+succeeds or fails, it must attempt to release the lock as its final cleanup step,
+but only after re-reading `APP_LOCK` and verifying that the stored token still
+matches its own. It must never remove a lock owned by another operation. An
+operation must validate ownership before each destructive phase and before
+release. If it loses ownership, it must stop making changes, perform only cleanup
+that cannot affect another owner's work, leave the foreign lock in place, and
+report the condition.
+
+Agents and Editor Mode acquire the lock after receiving all required
+authorization and collecting any user choices, and immediately before the first
+project-related mutation. Read-only planning and preflight may occur before
+acquisition. In Editor Mode, unsaved typing is not a project mutation and does
+not acquire the lock; the Save or other persistence action begins the logical
+operation. If an Editor interaction changes in-memory project state before
+persisting it, acquisition must precede that in-memory change.
+
+One lock must cover the entire logical operation rather than individual file
+system calls. It must remain held throughout all iterative writes, deletions,
+in-memory reconciliation, rollback, validation, and cleanup, including
+long-running multi-file operations. Editor Mode must prevent another mutating UI
+action while the operation is active and must retain both its Web Lock and
+`APP_LOCK` until final cleanup is complete and the UI is ready to return control
+to the user. Lock acquisition, ownership-validation, and release failures must be
+shown to the Editor in a dialog.
+
+Likewise, an Agent must retain one lock across the complete authorized execution,
+including all related file edits, generated assets, formatting, corrective
+changes, mutation-capable verification, and cleanup. It releases the lock only
+when that execution has finished or cannot safely continue.
+
+Read-only evaluation, Learner Mode, IndexedDB note autosaves, and ordinary
+browser downloads that do not alter the project tree do not acquire `APP_LOCK`.
+Any export or import that writes into the project tree does acquire it.
+
 # Slide content file format
 
 Content files:

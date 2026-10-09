@@ -489,7 +489,7 @@ body.presenter-mode .slide-content .gpt-followups h2 { font-size: 1.1em; }
   width: fit-content;
   max-width: 100%;
   margin: 0 0 1.25rem;
-  margin-top: 2.5rem;
+  margin-top: 2rem;
   text-align: left;
 }
 .slide-content .image-block.block--centered { margin-left: auto; margin-right: auto; text-align: center; }
@@ -1077,6 +1077,40 @@ body.presenter-mode .slide-content li { font-size: 125%; }
 .progress-dialog-title { margin: 0 0 .75rem; font-size: 1.15rem; overflow:hidden; }
 .progress-dialog .confirm-dialog-message { height: 4.5rem; margin-bottom: .8rem; overflow:hidden; }
 .progress-dialog-meter { display: block; width: 100%; overflow:hidden; }
+
+/* Delayed feedback for ordinary Editor Mode filesystem work. The element is created only by
+   editor.js after an operation has remained active long enough to avoid flashing on quick saves. */
+.editor-busy-overlay {
+  position: fixed;
+  z-index: 30;
+  top: 50%;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: .65rem;
+  padding: .8rem 1rem;
+  color: #343a40;
+  background: #fff;
+  border: 1px solid #c8cdd2;
+  border-radius: 6px;
+  box-shadow: 0 8px 24px #0003;
+  font-weight: 600;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+.editor-busy-spinner {
+  box-sizing: border-box;
+  width: 1.4rem;
+  height: 1.4rem;
+  border: 3px solid #d9dee2;
+  border-top-color: var(--umed-brand-accent);
+  border-radius: 50%;
+  animation: editor-busy-spin .75s linear infinite;
+}
+@keyframes editor-busy-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .editor-busy-spinner { animation: none; }
+}
 
 /* ==========================================================================
    11. Search results and utilities

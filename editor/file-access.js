@@ -9,6 +9,8 @@
   let rootHandlePromise = null;
   let appRootHandle = null;
   let mutationQueue = Promise.resolve();
+  let activeProjectLock = null;
+  const PROJECT_LOCK_FILE = "APP_LOCK";
 
   // Chrome can reject a File System Access operation when a synced placeholder file (Dropbox
   // Smart Sync, OneDrive Files On-Demand, etc.) changes state between resolving its handle and
@@ -85,7 +87,12 @@
   // to their primary file, and without coordination two otherwise valid UI actions can overlap
   // those writes and invalidate one another's browser-side filesystem state.
   function enqueueMutation(operation) {
-    const result = mutationQueue.then(operation, operation);
+    const guardedOperation = async () => {
+      if (!activeProjectLock) throw new Error("A project mutation was attempted without owning APP_LOCK.");
+      await validateProjectLock(activeProjectLock);
+      return operation();
+    };
+    const result = mutationQueue.then(guardedOperation, guardedOperation);
     mutationQueue = result.catch(() => {});
     return result;
   }
@@ -106,8 +113,8 @@
       ? window.umedComponents.confirm(
           `Editing or exporting needs one-time access to this App's project folder. In the next dialog, ` +
           `browse to your local copy of this App and select its root folder (the one that contains ` +
-          `"app.js", "index.html" and "src"), then choose it. Changes are only written inside ` +
-          `its "${CONTENT_ROOT_LABEL}" folder when you save edits.`,
+          `"app.js", "index.html" and "src"), then choose it. Edits are written only inside ` +
+          `"${CONTENT_ROOT_LABEL}"; a temporary APP_LOCK file is also created in the project root while saving.`,
           { confirmLabel: "Choose folder\u2026", cancelLabel: "Cancel" }
         )
       : Promise.resolve(true);
@@ -169,6 +176,93 @@
       return null;
     }
     return handle;
+  }
+
+  async function readProjectLock() {
+    return readRootFileText(appRootHandle, PROJECT_LOCK_FILE);
+  }
+
+  async function readProjectLockOnce() {
+    // APP_LOCK is normally absent. Check only once so every Editor action does not inherit the
+    // probe retry backoff (about 1.4 seconds) before it can begin. To restore the former
+    // cloud-sync-aware behavior, replace the direct read below with:
+    // return readProjectLock();
+    try {
+      const fileHandle = await appRootHandle.getFileHandle(PROJECT_LOCK_FILE);
+      return await (await fileHandle.getFile()).text();
+    } catch (error) {
+      if (error && error.name === "NotFoundError") return null;
+      throw error;
+    }
+  }
+
+  function parseProjectLock(text) {
+    if (!text) return null;
+    try { return JSON.parse(text); } catch (_error) { return { unreadable: true }; }
+  }
+
+  async function validateProjectLock(lock) {
+    const stored = parseProjectLock(await readProjectLock());
+    if (!stored || stored.ownerToken !== lock.ownerToken) {
+      throw new Error("Project lock ownership was lost. No further project changes were made.");
+    }
+  }
+
+  function lockDescription(stored) {
+    if (!stored || stored.unreadable) return "The existing APP_LOCK could not be read.";
+    const details = [stored.operation, stored.acquiredAt].filter(Boolean).join(" — ");
+    return details ? `Existing lock: ${details}` : "The project already contains APP_LOCK.";
+  }
+
+  async function runWithProjectFileLock(description, operation) {
+    const existingText = await readProjectLockOnce();
+    if (existingText !== null) {
+      throw new Error(`Another editing operation may be active. ${lockDescription(parseProjectLock(existingText))}`);
+    }
+
+    const lock = {
+      ownerToken: window.crypto && typeof window.crypto.randomUUID === "function"
+        ? window.crypto.randomUUID()
+        : Array.from(window.crypto.getRandomValues(new Uint8Array(16)), value => value.toString(16).padStart(2, "0")).join(""),
+      acquiredAt: new Date().toISOString(),
+      operation: description
+    };
+    const fileHandle = await appRootHandle.getFileHandle(PROJECT_LOCK_FILE, { create: true });
+    const writable = await fileHandle.createWritable();
+    await writable.write(JSON.stringify(lock));
+    await writable.close();
+    await validateProjectLock(lock);
+
+    activeProjectLock = lock;
+    try {
+      return await operation();
+    } finally {
+      try {
+        await validateProjectLock(lock);
+        await appRootHandle.removeEntry(PROJECT_LOCK_FILE);
+      } catch (error) {
+        console.error(error);
+        alert(`Could not safely release the project lock: ${error.message}`);
+      } finally {
+        activeProjectLock = null;
+      }
+    }
+  }
+
+  async function withProjectLock(description, operation) {
+    const contentHandle = await getContentRootHandle();
+    if (!contentHandle) return undefined;
+    if (!(navigator.locks && typeof navigator.locks.request === "function")) {
+      throw new Error("This browser cannot coordinate Editor Mode project locks between tabs, so the operation was cancelled.");
+    }
+
+    const appUuid = window.umedAppIdentity && window.umedAppIdentity.appUuid || "unknown-app";
+    return navigator.locks.request(`umed-project-${appUuid}`, { mode: "exclusive", ifAvailable: true }, async webLock => {
+      if (!webLock) {
+        throw new Error("Another Editor Mode operation is active, so this operation was cancelled.");
+      }
+      return runWithProjectFileLock(description, operation);
+    });
   }
 
   // Generic write shared by text (slide.js/content-index.js serialization) and binary (uploaded
@@ -440,6 +534,7 @@
       const contentHandle = await getContentRootHandle();
       return contentHandle ? appRootHandle : null;
     },
+    withProjectLock,
     writeTextFile: (...args) => enqueueMutation(() => writeFile(...args)),
     writeBinaryFile: (...args) => enqueueMutation(() => writeFile(...args)),
     getExistingFile,
