@@ -9,14 +9,15 @@ anyone, with rebranding support.
 
 ## um-agentic-ed-framework
 
-This repository, `um-agentic-ed-framework`, defines the structure and assembly  
-of `um-agentic-ed` apps whose content is defined by descendent copies of the
+This repository, `um-agentic-ed-framework`, is a git submodule that defines the 
+structure and assembly of `um-agentic-ed` apps whose content is defined by 
+descendent copies of the
 [um-agentic-ed-parent](https://github.com/um-agentic-ed/um-agentic-ed-parent)
 repository.
 
-`um-agentic-ed-framework` is loaded by usage instructions in the parent 
-repository and its derivative templates. This framework repository is never used 
-on its own.
+`um-agentic-ed-framework` is loaded by app developers when they create a new app 
+following instructions in the parent repository and its derivative templates. 
+This framework repository is never used on its own.
 
 ## AI notice
 
