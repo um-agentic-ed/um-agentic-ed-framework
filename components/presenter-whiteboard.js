@@ -446,16 +446,20 @@
     toggleButton.addEventListener("click", () => setColorPopupOpen(picker, toggleButton.getAttribute("aria-expanded") !== "true"));
     buttons.forEach(button => button.addEventListener("click", () => {
       const color = button.dataset.whiteboardColor;
-      if (target === "border") {
-        activeBorderColor = color;
-        if (canvas && canvas.freeDrawingBrush) canvas.freeDrawingBrush.color = color;
+      const hasSelection = canvas && canvas.getActiveObjects().length > 0;
+      if (hasSelection) {
+        applyColorToSelection(target, color);
+      } else {
+        if (target === "border") {
+          activeBorderColor = color;
+          if (canvas && canvas.freeDrawingBrush) canvas.freeDrawingBrush.color = color;
+        }
+        else activeFillColor = color;
+        buttons.forEach(item => item.setAttribute("aria-pressed", String(item === button)));
+        toggleButton.style.setProperty("--selected-whiteboard-color", color);
+        const colorName = button.getAttribute("aria-label").replace(` ${target}`, "").toLowerCase();
+        toggleButton.setAttribute("aria-label", `Choose ${target} color; ${colorName} selected`);
       }
-      else activeFillColor = color;
-      applyColorToSelection(target, color);
-      buttons.forEach(item => item.setAttribute("aria-pressed", String(item === button)));
-      toggleButton.style.setProperty("--selected-whiteboard-color", color);
-      const colorName = button.getAttribute("aria-label").replace(` ${target}`, "").toLowerCase();
-      toggleButton.setAttribute("aria-label", `Choose ${target} color; ${colorName} selected`);
       setColorPopupOpen(null, false);
     }));
   });
