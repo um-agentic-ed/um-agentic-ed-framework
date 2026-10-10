@@ -171,13 +171,9 @@
     return copy;
   }
 
-  function isExternalSource(value) {
-    return /^(?:https?:|data:|blob:)/i.test(value || "");
-  }
-
   function imagePathsForBlock(block, contentKey) {
     return (Array.isArray(block.images) ? block.images : [])
-      .filter(image => image && image.url && image.source !== "url" && !isExternalSource(image.url))
+      .filter(image => image && image.url && image.source !== "url")
       .map(image => {
         const basePath = image.source === "shared"
           ? "src/content/assets/images"

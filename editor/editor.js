@@ -574,6 +574,58 @@
     block.images = images;
   }
 
+  function isValidRemoteImageUrl(value) {
+    try {
+      const parsed = new URL(value);
+      return parsed.protocol === "https:" && Boolean(parsed.hostname) && !parsed.username && !parsed.password;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  async function promptRemoteImageUrl(initialValue) {
+    if (!window.umedComponents || typeof window.umedComponents.promptText !== "function") return null;
+    let value = initialValue || "";
+    while (true) {
+      const result = await window.umedComponents.promptText(
+        "Enter an absolute https:// image URL.\n\n" + 
+        "Loading a remote image requires network access and contacts the third-party image server.\n\n" + 
+        "Add proper source attribution in the image Label, Markdown, or a separate Text block.",
+        { initialValue: value, confirmLabel: initialValue ? "Update URL" : "Add URL" }
+      );
+      if (result === null) return null;
+      value = result.trim();
+      if (isValidRemoteImageUrl(value)) return value;
+      alert("Enter an absolute https:// URL without embedded credentials. blob:, data:, http:, and relative URLs are not allowed.");
+    }
+  }
+
+  async function addRemoteImageUrl(block, rerenderImages) {
+    const url = await promptRemoteImageUrl("");
+    if (!url) return;
+    setBlockImages(block, [...blockImages(block), { source: "url", url }]);
+    rerenderImages();
+    scheduleRefresh();
+  }
+
+  async function editRemoteImageUrl(image, rerenderImages) {
+    const url = await promptRemoteImageUrl(image.url);
+    if (!url || url === image.url) return;
+    image.url = url;
+    rerenderImages();
+    scheduleRefresh();
+  }
+
+  async function removeRemoteImageUrl(image, block, rerenderImages) {
+    if (!(await editorConfirm(
+      `Remove this remote image URL from the block?\n\n${image.url}`,
+      { confirmLabel: "Remove", cancelLabel: "Cancel" }
+    ))) return;
+    setBlockImages(block, blockImages(block).filter(entry => entry !== image));
+    rerenderImages();
+    scheduleRefresh();
+  }
+
   function mapSavedBlockCounterparts(data, snapshot, force = false) {
     const liveBlocks = (data.content && data.content.blocks) || [];
     const savedBlocks = (snapshot.content && snapshot.content.blocks) || [];
@@ -853,17 +905,23 @@
         editButton.type = "button";
         editButton.className = "editor-image-file-edit";
         editButton.innerHTML = (window.umedIcons && window.umedIcons.edit) || "Edit";
-        editButton.title = `Edit ${fileName}`;
-        editButton.setAttribute("aria-label", `Edit image ${fileName}`);
-        editButton.hidden = !["jpg", "jpeg", "png", "webp"].includes(extension);
-        editButton.addEventListener("click", () => runLockedEditorAction("Edit an image", () => editImageFile(image, block, rerenderImages)));
+        editButton.title = image.source === "url" ? "Edit image URL" : `Edit ${fileName}`;
+        editButton.setAttribute("aria-label", image.source === "url" ? `Edit image URL ${fileName}` : `Edit image ${fileName}`);
+        editButton.hidden = image.source !== "url" && !["jpg", "jpeg", "png", "webp"].includes(extension);
+        editButton.addEventListener("click", () => {
+          if (image.source === "url") editRemoteImageUrl(image, rerenderImages);
+          else runLockedEditorAction("Edit an image", () => editImageFile(image, block, rerenderImages));
+        });
         const removeButton = document.createElement("button");
         removeButton.type = "button";
         removeButton.className = "editor-image-file-remove";
         removeButton.textContent = "\u00d7";
         removeButton.title = `Remove ${fileName} from this image block`;
         removeButton.setAttribute("aria-label", `Remove image ${fileName}`);
-        removeButton.addEventListener("click", () => runLockedEditorAction("Remove an image", () => removeImageFile(image, block, rerenderImages)));
+        removeButton.addEventListener("click", () => {
+          if (image.source === "url") removeRemoteImageUrl(image, block, rerenderImages);
+          else runLockedEditorAction("Remove an image", () => removeImageFile(image, block, rerenderImages));
+        });
         row.append(handle, name, editButton, removeButton);
         list.append(row);
       });
@@ -914,7 +972,12 @@
     restoreButton.className = "editor-add-choice";
     restoreButton.textContent = "Restore Image";
     restoreButton.addEventListener("click", () => runLockedEditorAction("Restore an image", () => restoreImageFile(block, getNewImageSource(), rerenderImages)));
-    dropZone.append(list, dropHint, uploadButton, restoreButton, uploadInput);
+    const addUrlButton = document.createElement("button");
+    addUrlButton.type = "button";
+    addUrlButton.className = "editor-add-choice";
+    addUrlButton.textContent = "Add URL";
+    addUrlButton.addEventListener("click", () => addRemoteImageUrl(block, rerenderImages));
+    dropZone.append(list, dropHint, uploadButton, restoreButton, addUrlButton, uploadInput);
     attachFileDropTarget(dropZone, files => runLockedEditorAction("Upload images", () => uploadImageFiles(files, block, getNewImageSource(), rerenderImages)));
 
     fieldset.append(dropZone);
@@ -1029,7 +1092,7 @@
 
       const controls = document.createElement("div");
       controls.className = "editor-image-controls";
-      let newImageSource = blockImages(block)[0]?.source || "slide";
+      let newImageSource = blockImages(block).find(image => image.source !== "url")?.source || "slide";
       const source = document.createElement("select");
       [["slide", "Slide"], ["shared", "Shared"]].forEach(([value, label]) => {
         const option = document.createElement("option");
@@ -1040,10 +1103,12 @@
       });
       source.addEventListener("change", () => {
         newImageSource = source.value;
-        blockImages(block).forEach(image => { image.source = newImageSource; });
+        blockImages(block)
+          .filter(image => image.source !== "url")
+          .forEach(image => { image.source = newImageSource; });
         scheduleRefresh();
       });
-      const sourceField = field("Image source", source);
+      const sourceField = field("Local image source", source);
       if (window.umedComponents && window.umedComponents.attachTooltip) {
         window.umedComponents.attachTooltip(
           sourceField.querySelector("span"),

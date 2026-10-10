@@ -392,7 +392,7 @@ type-specific fields:
   (opened in a new `umed-external` tab) and auto-linked URLs. A single newline
   renders as a line break. Raw HTML is not allowed (it is shown as literal
   text), and Markdown images (`![]()`) are never loaded and show only their alt 
-  text; use an `image` block, which carries alt text and attribution. Question 
+  text; use an `image` block, which carries alt text and source information. Question
   block `prompt` fields render as block Markdown, and Question choice text and 
   feedback render as inline-only Markdown.
 - `image`, `link`, `widget`, and `dataFile` blocks additionally accept an
@@ -403,16 +403,20 @@ type-specific fields:
 - `image` block: `images` (an ordered array of objects, each with `source`
   (`"slide"` for an asset in the Slide folder, `"shared"` for an asset in
   `src/content/assets/images`, or `"url"` for an external URL) and `url` (the
-  corresponding filename or URL)), `label` (an optional visible caption),
-  `alt` (required alt text),
+  corresponding filename or URL)). Newly authored remote images must use an
+  absolute `https://` URL; `http:`, `data:`, `blob:`, relative URLs, and URLs
+  containing embedded credentials are not allowed. Remote images require
+  network access and contact a third-party server. `label` is an optional
+  visible caption, `alt` (required alt text),
   `maxWidths`
   (a space or comma-delimited list of raw CSS `max-width` values, e.g.
   `200px, 50%`, applied respectively to each entry in `images`; a
   single value applies to every image on the block; an empty, blank, or
   invalid-CSS entry falls back to `50%` for that image), `center` (a boolean;
   when true, centers the wrapper containing the block's image set; when false
-  or omitted, left-aligns it), and `attribution`
-  (a string with source name/link, or `null` for original content).
+  or omitted, left-aligns it), and `importedFrom` (optional provenance metadata
+  naming the source file from which an image was imported; it is not rendered
+  to Learners and is not a substitute for copyright attribution).
 - `link` block: An external web site URL that opens via an `<a>` tag into a new 
   browser tab named `umed-external`, with a `label` and a `url` field for 
   constructing its tag.
@@ -633,8 +637,13 @@ When generating content for a Section, you should:
   with manipulation Adobe Illustrator.
 - Some images might naturally require bitmap rendering in JPG format, e.g., 
   photographic content.
-- You are allowed to embed public URL content such as `<img>` tags:
-  - Include attribution and a link to the primary site.
+- You may embed public URL content with an image block entry whose `source` is
+  `"url"` and whose `url` is an absolute `https://` URL. Do not use raw `<img>`
+  tags, `http:`, `data:`, or `blob:` image sources.
+  - Agents must include proper copyright/source attribution, preferably in the
+    image block's `label`, otherwise in its `markdown`, or in a separate visible
+    block dedicated to source attribution. Editors are responsible for doing the
+    same when they add public image URLs in Editor Mode.
   - Prefer generated over linked images to minimize copyright issues, but do
     not attempt to recreate highly complex renderings.
 

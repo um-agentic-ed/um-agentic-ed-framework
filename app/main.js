@@ -2285,10 +2285,14 @@
       images.forEach((entry, index) => {
         const imageBasePath = entry.source === "shared" ? `${CONTENT_ROOT}/assets/images` : assetBasePath;
         const image = document.createElement("img");
-        image.src = entry.source === "url" || /^(?:https?:|data:|blob:)/i.test(entry.url)
+        image.alt = block.alt || "";
+        if (entry.source === "url") {
+          image.referrerPolicy = "no-referrer";
+          image.addEventListener("error", () => { image.alt = "Remote image failed to load."; });
+        }
+        image.src = entry.source === "url"
           ? entry.url
           : cacheBustedLocalSrc(`${imageBasePath}/${entry.url}`);
-        image.alt = block.alt || "";
         image.style.maxWidth = resolveCssMaxWidth(maxWidths.length === 1 ? maxWidths[0] : maxWidths[index], DEFAULT_IMAGE_MAX_WIDTH);
         wrapper.append(image);
       });
@@ -2430,7 +2434,8 @@
 
   // The only place free-text Editor entries become HTML (see AGENTS.md). markdown-it runs with raw
   // HTML disabled and its built-in link validation (blocks javascript:/vbscript:/most data: URLs).
-  // Markdown images are never loaded (shown as their alt text) because image blocks carry the\n  // required alt text and attribution.
+  // Markdown images are never loaded (shown as their alt text) because image blocks carry the
+  // required alt text and source information.
   let markdownRenderer = null;
 
   function getMarkdownRenderer() {
