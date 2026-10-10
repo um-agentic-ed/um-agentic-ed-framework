@@ -179,8 +179,7 @@
     const basePath = block.imageSource === "shared"
       ? "src/content/assets/images"
       : `src/content/${contentKey}`;
-    return (block.fileName || block.src || "")
-      .split(/[\s,]+/)
+    return (Array.isArray(block.urls) ? block.urls : [])
       .filter(Boolean)
       .filter(fileName => !isExternalSource(fileName))
       .map(fileName => `${basePath}/${fileName}`);

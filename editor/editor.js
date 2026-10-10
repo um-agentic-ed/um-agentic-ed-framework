@@ -565,16 +565,13 @@
 
   // Uploads one or more Editor-picked image files into the block's target folder (Slide or
   // shared asset), asking for confirmation on a same-name collision, then appends each uploaded
-  // file's name to the block's file name list (deduplicated) and refreshes the live preview.
+  // file's name to the block's URL list (deduplicated) and refreshes the live preview.
   function imageFileNames(block) {
-    return (block.fileName || block.src || "").split(/[\s,]+/).filter(Boolean);
+    return Array.isArray(block.urls) ? block.urls.filter(Boolean) : [];
   }
 
   function setImageFileNames(block, fileNames) {
-    block.fileName = fileNames.join(", ");
-    // `src` is retained only for compatibility with older content. Once the managed list is
-    // edited, fileName is the authoritative field and src must not repopulate removed entries.
-    if (Object.prototype.hasOwnProperty.call(block, "src")) delete block.src;
+    block.urls = fileNames;
   }
 
   function mapSavedBlockCounterparts(data, snapshot, force = false) {
@@ -592,7 +589,7 @@
     setImageFileNames(block, replaced);
   }
 
-  // Image pixels and their filename declaration form one filesystem transaction from the
+  // Image pixels and their URL declaration form one filesystem transaction from the
   // Editor's perspective. Persist just that declaration against the last-saved content snapshot;
   // other dirty form fields remain pending for the normal Save Changes workflow.
   async function persistEditedImageReference(rootHandle, info, block, oldFileName, newFileName) {
@@ -1290,7 +1287,7 @@
     const columns = [
       [
         ["Text", () => ({ type: "text", markdown: "" })],
-        ["Image(s)", () => ({ type: "image", markdown: "", imageSource: "slide", fileName: "", alt: "", maxWidths: "", center: false, label: null })],
+        ["Image(s)", () => ({ type: "image", markdown: "", imageSource: "slide", urls: [], alt: "", maxWidths: "", center: false, label: null })],
         ["Link", () => ({ type: "link", markdown: "", label: "", url: "" })],
         ["Divider", () => ({ type: "divider" })],
         ["Data File", () => ({ type: "dataFile", markdown: "", name: "", extensions: "", prompt: "" })]

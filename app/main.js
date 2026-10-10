@@ -2278,17 +2278,17 @@
       renderBlockMarkdown(block, parent);
       const imageSource = block.imageSource || "slide";
       const imageBasePath = imageSource === "shared" ? `${CONTENT_ROOT}/assets/images` : assetBasePath;
-      const fileNames = (block.fileName || block.src || "").split(/[\s,]+/).filter(Boolean);
+      const urls = Array.isArray(block.urls) ? block.urls.filter(Boolean) : [];
       const maxWidths = (block.maxWidths || "").split(/[\s,]+/).filter(Boolean);
 
       const wrapper = document.createElement("div");
       wrapper.className = "image-block";
       if (block.center) wrapper.classList.add("block--centered");
-      fileNames.forEach((fileName, index) => {
+      urls.forEach((url, index) => {
         const image = document.createElement("img");
-        image.src = /^(?:https?:|data:|blob:)/i.test(fileName)
-          ? fileName
-          : cacheBustedLocalSrc(`${imageBasePath}/${fileName}`);
+        image.src = /^(?:https?:|data:|blob:)/i.test(url)
+          ? url
+          : cacheBustedLocalSrc(`${imageBasePath}/${url}`);
         image.alt = block.alt || "";
         image.style.maxWidth = resolveCssMaxWidth(maxWidths.length === 1 ? maxWidths[0] : maxWidths[index], DEFAULT_IMAGE_MAX_WIDTH);
         wrapper.append(image);

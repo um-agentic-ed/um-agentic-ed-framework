@@ -400,14 +400,13 @@ type-specific fields:
   block's `markdown` above. It renders immediately before that block's own
   content and lets an Editor attach short lead-in text that stays attached to,
   and reorders together with, the rest of that block's content.
-- `image` block: `fileName` (the authoritative space- or comma-delimited list
-  of image filenames or URLs), `src` (a legacy compatibility alias used only
-  when `fileName` is absent), `imageSource` (`"slide"` for assets in the Slide
+- `image` block: `urls` (an array of individual image filenames or URLs),
+  `imageSource` (`"slide"` for assets in the Slide
   folder or `"shared"` for assets in `src/content/assets/images`; defaults to
   `"slide"`), `label` (an optional visible caption), `alt` (required alt text),
   `maxWidths`
   (a space or comma-delimited list of raw CSS `max-width` values, e.g.
-  `200px, 50%`, applied respectively to each file in `fileName`; a
+  `200px, 50%`, applied respectively to each entry in `urls`; a
   single value applies to every image on the block; an empty, blank, or
   invalid-CSS entry falls back to `50%` for that image), `center` (a boolean;
   when true, centers the wrapper containing the block's image set; when false
