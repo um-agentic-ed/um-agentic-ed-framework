@@ -2276,19 +2276,18 @@
       return;
     } else if (block.type === "image") {
       renderBlockMarkdown(block, parent);
-      const imageSource = block.imageSource || "slide";
-      const imageBasePath = imageSource === "shared" ? `${CONTENT_ROOT}/assets/images` : assetBasePath;
-      const urls = Array.isArray(block.urls) ? block.urls.filter(Boolean) : [];
+      const images = Array.isArray(block.images) ? block.images.filter(image => image && image.url) : [];
       const maxWidths = (block.maxWidths || "").split(/[\s,]+/).filter(Boolean);
 
       const wrapper = document.createElement("div");
       wrapper.className = "image-block";
       if (block.center) wrapper.classList.add("block--centered");
-      urls.forEach((url, index) => {
+      images.forEach((entry, index) => {
+        const imageBasePath = entry.source === "shared" ? `${CONTENT_ROOT}/assets/images` : assetBasePath;
         const image = document.createElement("img");
-        image.src = /^(?:https?:|data:|blob:)/i.test(url)
-          ? url
-          : cacheBustedLocalSrc(`${imageBasePath}/${url}`);
+        image.src = entry.source === "url" || /^(?:https?:|data:|blob:)/i.test(entry.url)
+          ? entry.url
+          : cacheBustedLocalSrc(`${imageBasePath}/${entry.url}`);
         image.alt = block.alt || "";
         image.style.maxWidth = resolveCssMaxWidth(maxWidths.length === 1 ? maxWidths[0] : maxWidths[index], DEFAULT_IMAGE_MAX_WIDTH);
         wrapper.append(image);

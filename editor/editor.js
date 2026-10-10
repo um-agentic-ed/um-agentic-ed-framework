@@ -558,20 +558,20 @@
 
   // Resolves the folder (relative to the content root handle) that an image block's files
   // belong in, matching the imageBasePath logic in main.js's renderBlock.
-  function imageRelativeDir(block) {
-    if ((block.imageSource || "slide") === "shared") return "assets/images";
+  function imageRelativeDir(image) {
+    if (image.source === "shared") return "assets/images";
     return contentRelativePath((current && current.assetBasePath) || window.umedContentRoot);
   }
 
   // Uploads one or more Editor-picked image files into the block's target folder (Slide or
   // shared asset), asking for confirmation on a same-name collision, then appends each uploaded
   // file's name to the block's URL list (deduplicated) and refreshes the live preview.
-  function imageFileNames(block) {
-    return Array.isArray(block.urls) ? block.urls.filter(Boolean) : [];
+  function blockImages(block) {
+    return Array.isArray(block.images) ? block.images.filter(image => image && image.url) : [];
   }
 
-  function setImageFileNames(block, fileNames) {
-    block.urls = fileNames;
+  function setBlockImages(block, images) {
+    block.images = images;
   }
 
   function mapSavedBlockCounterparts(data, snapshot, force = false) {
@@ -582,17 +582,24 @@
     });
   }
 
-  function replaceImageFileName(block, oldFileName, newFileName) {
-    const names = imageFileNames(block);
-    const replaced = names.map(name => name === oldFileName ? newFileName : name);
-    if (!names.includes(oldFileName) && !replaced.includes(newFileName)) replaced.push(newFileName);
-    setImageFileNames(block, replaced);
+  function replaceImageFileName(block, oldImage, newFileName) {
+    const images = blockImages(block);
+    let replaced = false;
+    const updated = images.map(image => {
+      if (!replaced && image.source === oldImage.source && image.url === oldImage.url) {
+        replaced = true;
+        return { ...image, url: newFileName };
+      }
+      return image;
+    });
+    if (!replaced) updated.push({ source: oldImage.source, url: newFileName });
+    setBlockImages(block, updated);
   }
 
   // Image pixels and their URL declaration form one filesystem transaction from the
   // Editor's perspective. Persist just that declaration against the last-saved content snapshot;
   // other dirty form fields remain pending for the normal Save Changes workflow.
-  async function persistEditedImageReference(rootHandle, info, block, oldFileName, newFileName) {
+  async function persistEditedImageReference(rootHandle, info, block, oldImage, newFileName) {
     const data = window.umedAppContent[info.key];
     const snapshot = savedSnapshots.get(info.key);
     if (!data || !snapshot) throw new Error("The saved content baseline is unavailable.");
@@ -607,7 +614,7 @@
     let candidateBlock;
     if (savedIndex >= 0) {
       candidateBlock = candidate.content.blocks[savedIndex];
-      replaceImageFileName(candidateBlock, oldFileName, newFileName);
+      replaceImageFileName(candidateBlock, oldImage, newFileName);
     } else {
       const liveIndex = ((data.content && data.content.blocks) || []).indexOf(block);
       candidateBlock = JSON.parse(JSON.stringify(block));
@@ -627,7 +634,7 @@
     let persistedBlock;
     if (savedIndex >= 0) {
       persistedBlock = snapshot.content.blocks[savedIndex];
-      replaceImageFileName(persistedBlock, oldFileName, newFileName);
+      replaceImageFileName(persistedBlock, oldImage, newFileName);
     } else {
       const liveIndex = ((data.content && data.content.blocks) || []).indexOf(block);
       persistedBlock = JSON.parse(JSON.stringify(block));
@@ -644,13 +651,13 @@
     if (current && current.key === info.key) updateSaveButtonState();
   }
 
-  function imageRelativePath(block, fileName) {
-    const relativeDir = imageRelativeDir(block);
+  function imageRelativePath(image, fileName = image.url) {
+    const relativeDir = imageRelativeDir(image);
     return relativeDir ? `${relativeDir}/${fileName}` : fileName;
   }
 
-  function imageUnusedPath(block, fileName) {
-    const relativeDir = imageRelativeDir(block);
+  function imageUnusedPath(image, fileName = image.url) {
+    const relativeDir = imageRelativeDir(image);
     return relativeDir ? `${relativeDir}/_unused/${fileName}` : `_unused/${fileName}`;
   }
 
@@ -668,7 +675,8 @@
     return a.base === b.base && a.extension === b.extension;
   }
 
-  async function editImageFile(fileName, block, rerenderImages) {
+  async function editImageFile(image, block, rerenderImages) {
+    const fileName = image.url;
     if (!window.umedImageEditor || !window.umedEditorFS) {
       alert("Image editing tools are unavailable.");
       return;
@@ -681,12 +689,12 @@
     try {
       newFileName = await window.umedImageEditor.open({
         rootHandle,
-        relativeDir: imageRelativeDir(block),
+        relativeDir: imageRelativeDir(image),
         fileName
       });
       if (!newFileName) return;
-      replaceImageFileName(block, fileName, newFileName);
-      await persistEditedImageReference(rootHandle, info, block, fileName, newFileName);
+      replaceImageFileName(block, image, newFileName);
+      await persistEditedImageReference(rootHandle, info, block, image, newFileName);
       rerenderImages();
       if (window.umedApp && typeof window.umedApp.refreshSlide === "function") window.umedApp.refreshSlide();
     } catch (error) {
@@ -702,24 +710,25 @@
     }
   }
 
-  async function removeImageFile(fileName, block, rerenderImages) {
+  async function removeImageFile(image, block, rerenderImages) {
+    const fileName = image.url;
     const action = await chooseFileRemovalAction(fileName, "image");
     if (!action || !window.umedEditorFS) return;
     const rootHandle = await window.umedEditorFS.getContentRootHandle();
     if (!rootHandle) return;
     try {
       if (action === "Move to _unused") {
-        const unusedPath = imageUnusedPath(block, fileName);
+        const unusedPath = imageUnusedPath(image);
         const existing = await window.umedEditorFS.getExistingFile(rootHandle, unusedPath);
         if (existing && !(await editorConfirm(
           `An unused image named "${fileName}" already exists. Replace it?`,
           { confirmLabel: "Replace", cancelLabel: "Cancel" }
         ))) return;
-        await window.umedEditorFS.moveFile(rootHandle, imageRelativePath(block, fileName), unusedPath);
+        await window.umedEditorFS.moveFile(rootHandle, imageRelativePath(image), unusedPath);
       } else {
-        await window.umedEditorFS.deleteFile(rootHandle, imageRelativePath(block, fileName));
+        await window.umedEditorFS.deleteFile(rootHandle, imageRelativePath(image));
       }
-      setImageFileNames(block, imageFileNames(block).filter(name => name !== fileName));
+      setBlockImages(block, blockImages(block).filter(entry => entry !== image));
       rerenderImages();
       scheduleRefresh();
     } catch (error) {
@@ -728,11 +737,12 @@
     }
   }
 
-  async function restoreImageFile(block, rerenderImages) {
+  async function restoreImageFile(block, source, rerenderImages) {
+    const restoredImage = { source, url: "" };
     if (!window.umedEditorFS || !window.umedComponents || !window.umedComponents.chooseOption) return;
     const rootHandle = await window.umedEditorFS.getContentRootHandle();
     if (!rootHandle) return;
-    const unusedDir = `${imageRelativeDir(block)}/_unused`.replace(/^\//, "");
+    const unusedDir = `${imageRelativeDir(restoredImage)}/_unused`.replace(/^\//, "");
     try {
       const names = await window.umedEditorFS.listFiles(rootHandle, unusedDir);
       if (!names.length) {
@@ -741,26 +751,28 @@
       }
       const fileName = await window.umedComponents.chooseOption("Choose an image to restore:", names);
       if (!fileName) return;
-      const activePath = imageRelativePath(block, fileName);
+      restoredImage.url = fileName;
+      const activePath = imageRelativePath(restoredImage);
       if (await window.umedEditorFS.getExistingFile(rootHandle, activePath)) {
         alert(`An image named "${fileName}" already exists in this location.`);
         return;
       }
-      const currentNames = imageFileNames(block);
-      const supersededNames = currentNames.filter(name => sameImageVersionLineage(name, fileName));
+      const currentImages = blockImages(block);
+      const supersededImages = currentImages.filter(image => image.source === source && sameImageVersionLineage(image.url, fileName));
+      const supersededNames = supersededImages.map(image => image.url);
       for (const supersededName of supersededNames) {
-        const unusedPath = imageUnusedPath(block, supersededName);
+        const unusedPath = imageUnusedPath(restoredImage, supersededName);
         if (await window.umedEditorFS.getExistingFile(rootHandle, unusedPath)) {
           alert(`Cannot restore "${fileName}" because _unused already contains "${supersededName}".`);
           return;
         }
       }
       for (const supersededName of supersededNames) {
-        await window.umedEditorFS.moveFile(rootHandle, imageRelativePath(block, supersededName), imageUnusedPath(block, supersededName));
+        await window.umedEditorFS.moveFile(rootHandle, imageRelativePath(restoredImage, supersededName), imageUnusedPath(restoredImage, supersededName));
       }
-      await window.umedEditorFS.moveFile(rootHandle, imageUnusedPath(block, fileName), activePath);
-      const retainedNames = currentNames.filter(name => !sameImageVersionLineage(name, fileName));
-      setImageFileNames(block, [...retainedNames, fileName]);
+      await window.umedEditorFS.moveFile(rootHandle, imageUnusedPath(restoredImage), activePath);
+      const retainedImages = currentImages.filter(image => !supersededImages.includes(image));
+      setBlockImages(block, [...retainedImages, restoredImage]);
       rerenderImages();
       scheduleRefresh();
     } catch (error) {
@@ -769,7 +781,7 @@
     }
   }
 
-  async function uploadImageFiles(files, block, rerenderImages) {
+  async function uploadImageFiles(files, block, source, rerenderImages) {
     if (!files.length || !current) return;
     if (!window.umedEditorFS) {
       alert("File system access is unavailable in this browser.");
@@ -778,13 +790,14 @@
     const rootHandle = await window.umedEditorFS.getContentRootHandle();
     if (!rootHandle) return; // Editor cancelled the folder access prompt.
 
-    const existingNames = imageFileNames(block);
+    const existingImages = blockImages(block);
+    const existingNames = existingImages.filter(image => image.source === source).map(image => image.url);
     const namesToAdd = [];
     let wroteFile = false;
 
     for (const file of files) {
       if (file.type && !file.type.startsWith("image/")) continue; // guard against non-image picks
-      const relativePath = imageRelativePath(block, file.name);
+      const relativePath = imageRelativePath({ source, url: file.name });
       try {
         const existingFile = await window.umedEditorFS.getExistingFile(rootHandle, relativePath);
         let overwrite = true;
@@ -809,19 +822,20 @@
     }
 
     if (namesToAdd.length) {
-      setImageFileNames(block, [...existingNames, ...namesToAdd]);
+      setBlockImages(block, [...existingImages, ...namesToAdd.map(url => ({ source, url }))]);
       rerenderImages();
     }
     if (namesToAdd.length || wroteFile) scheduleRefresh();
   }
 
-  function buildImageFileFields(block, fieldset) {
+  function buildImageFileFields(block, fieldset, getNewImageSource) {
     const list = document.createElement("div");
     list.className = "editor-image-files";
 
     function rerenderImages() {
       list.replaceChildren();
-      imageFileNames(block).forEach((fileName, index) => {
+      blockImages(block).forEach((image, index) => {
+        const fileName = image.url;
         const row = document.createElement("div");
         row.className = "editor-image-file-row";
         const handle = document.createElement("span");
@@ -833,7 +847,7 @@
         name.type = "text";
         name.readOnly = true;
         name.value = fileName;
-        name.setAttribute("aria-label", `Image ${index + 1} file name`);
+        name.setAttribute("aria-label", `Image ${index + 1} ${image.source} source`);
         const extension = fileName.split(".").pop().toLowerCase();
         const editButton = document.createElement("button");
         editButton.type = "button";
@@ -842,14 +856,14 @@
         editButton.title = `Edit ${fileName}`;
         editButton.setAttribute("aria-label", `Edit image ${fileName}`);
         editButton.hidden = !["jpg", "jpeg", "png", "webp"].includes(extension);
-        editButton.addEventListener("click", () => runLockedEditorAction("Edit an image", () => editImageFile(fileName, block, rerenderImages)));
+        editButton.addEventListener("click", () => runLockedEditorAction("Edit an image", () => editImageFile(image, block, rerenderImages)));
         const removeButton = document.createElement("button");
         removeButton.type = "button";
         removeButton.className = "editor-image-file-remove";
         removeButton.textContent = "\u00d7";
         removeButton.title = `Remove ${fileName} from this image block`;
         removeButton.setAttribute("aria-label", `Remove image ${fileName}`);
-        removeButton.addEventListener("click", () => runLockedEditorAction("Remove an image", () => removeImageFile(fileName, block, rerenderImages)));
+        removeButton.addEventListener("click", () => runLockedEditorAction("Remove an image", () => removeImageFile(image, block, rerenderImages)));
         row.append(handle, name, editButton, removeButton);
         list.append(row);
       });
@@ -863,10 +877,10 @@
       dragClass: "editor-image-file-row--drag",
       onEnd(event) {
         if (event.oldIndex === event.newIndex) return;
-        const names = imageFileNames(block);
-        const [moved] = names.splice(event.oldIndex, 1);
-        names.splice(event.newIndex, 0, moved);
-        setImageFileNames(block, names);
+        const images = blockImages(block);
+        const [moved] = images.splice(event.oldIndex, 1);
+        images.splice(event.newIndex, 0, moved);
+        setBlockImages(block, images);
         rerenderImages();
         scheduleRefresh();
       }
@@ -887,7 +901,7 @@
     uploadInput.addEventListener("change", async () => {
       const files = Array.from(uploadInput.files || []);
       uploadInput.value = ""; // allow re-selecting the same file name to fire change again
-      if (files.length) await runLockedEditorAction("Upload images", () => uploadImageFiles(files, block, rerenderImages));
+      if (files.length) await runLockedEditorAction("Upload images", () => uploadImageFiles(files, block, getNewImageSource(), rerenderImages));
     });
 
     const dropZone = document.createElement("div");
@@ -899,9 +913,9 @@
     restoreButton.type = "button";
     restoreButton.className = "editor-add-choice";
     restoreButton.textContent = "Restore Image";
-    restoreButton.addEventListener("click", () => runLockedEditorAction("Restore an image", () => restoreImageFile(block, rerenderImages)));
+    restoreButton.addEventListener("click", () => runLockedEditorAction("Restore an image", () => restoreImageFile(block, getNewImageSource(), rerenderImages)));
     dropZone.append(list, dropHint, uploadButton, restoreButton, uploadInput);
-    attachFileDropTarget(dropZone, files => runLockedEditorAction("Upload images", () => uploadImageFiles(files, block, rerenderImages)));
+    attachFileDropTarget(dropZone, files => runLockedEditorAction("Upload images", () => uploadImageFiles(files, block, getNewImageSource(), rerenderImages)));
 
     fieldset.append(dropZone);
     rerenderImages();
@@ -1015,15 +1029,20 @@
 
       const controls = document.createElement("div");
       controls.className = "editor-image-controls";
+      let newImageSource = blockImages(block)[0]?.source || "slide";
       const source = document.createElement("select");
       [["slide", "Slide"], ["shared", "Shared"]].forEach(([value, label]) => {
         const option = document.createElement("option");
         option.value = value;
         option.textContent = label;
-        option.selected = (block.imageSource || "slide") === value;
+        option.selected = newImageSource === value;
         source.append(option);
       });
-      source.addEventListener("change", () => { block.imageSource = source.value; scheduleRefresh(); });
+      source.addEventListener("change", () => {
+        newImageSource = source.value;
+        blockImages(block).forEach(image => { image.source = newImageSource; });
+        scheduleRefresh();
+      });
       const sourceField = field("Image source", source);
       if (window.umedComponents && window.umedComponents.attachTooltip) {
         window.umedComponents.attachTooltip(
@@ -1051,7 +1070,7 @@
       }));
       fieldset.append(controls);
 
-      buildImageFileFields(block, fieldset);
+      buildImageFileFields(block, fieldset, () => newImageSource);
 
       const label = document.createElement("input");
       label.type = "text";
@@ -1287,7 +1306,7 @@
     const columns = [
       [
         ["Text", () => ({ type: "text", markdown: "" })],
-        ["Image(s)", () => ({ type: "image", markdown: "", imageSource: "slide", urls: [], alt: "", maxWidths: "", center: false, label: null })],
+        ["Image(s)", () => ({ type: "image", markdown: "", images: [], alt: "", maxWidths: "", center: false, label: null })],
         ["Link", () => ({ type: "link", markdown: "", label: "", url: "" })],
         ["Divider", () => ({ type: "divider" })],
         ["Data File", () => ({ type: "dataFile", markdown: "", name: "", extensions: "", prompt: "" })]

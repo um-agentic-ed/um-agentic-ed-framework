@@ -176,13 +176,14 @@
   }
 
   function imagePathsForBlock(block, contentKey) {
-    const basePath = block.imageSource === "shared"
-      ? "src/content/assets/images"
-      : `src/content/${contentKey}`;
-    return (Array.isArray(block.urls) ? block.urls : [])
-      .filter(Boolean)
-      .filter(fileName => !isExternalSource(fileName))
-      .map(fileName => `${basePath}/${fileName}`);
+    return (Array.isArray(block.images) ? block.images : [])
+      .filter(image => image && image.url && image.source !== "url" && !isExternalSource(image.url))
+      .map(image => {
+        const basePath = image.source === "shared"
+          ? "src/content/assets/images"
+          : `src/content/${contentKey}`;
+        return `${basePath}/${image.url}`;
+      });
   }
 
   function fileToDataUrl(file) {
