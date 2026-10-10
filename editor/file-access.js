@@ -284,6 +284,22 @@
     }, maxAttempts, maxAttempts > 1 ? `writeFile ${relativePath}` : undefined);
   }
 
+  // Strict read for files expected to exist. Resolve the complete path and obtain the File inside
+  // one retryable operation so a cloud-sync hydration failure at either stage restarts the read
+  // from the supplied root handle. Unlike getExistingFile, persistent absence remains an error.
+  async function readFile(rootHandle, relativePath, maxAttempts = BULK_ATTEMPTS) {
+    const segments = relativePath.split("/").filter(Boolean);
+    const fileName = segments.pop();
+    return withRetry(async () => {
+      let dirHandle = rootHandle;
+      for (const segment of segments) {
+        dirHandle = await dirHandle.getDirectoryHandle(segment);
+      }
+      const fileHandle = await dirHandle.getFileHandle(fileName);
+      return fileHandle.getFile();
+    }, maxAttempts, `readFile ${relativePath}`);
+  }
+
   // Looks up a file that may already exist at relativePath (e.g. to check for an upload name
   // collision) without creating anything. Returns the File (with its .size) or null if either
   // the folder or the file itself doesn't exist yet. Defaults to the fast probe budget; pass
@@ -537,6 +553,7 @@
     withProjectLock,
     writeTextFile: (...args) => enqueueMutation(() => writeFile(...args)),
     writeBinaryFile: (...args) => enqueueMutation(() => writeFile(...args)),
+    readFile,
     getExistingFile,
     directoryExists,
     listFiles,
@@ -547,11 +564,6 @@
     replaceTextInJavaScriptFiles: (...args) => enqueueMutation(() => replaceTextInJavaScriptFiles(...args)),
     listFilesRecursive,
     // Wrapped in the mutation queue because calibration performs a real probe write + delete.
-    checkPathBudget: (...args) => enqueueMutation(() => checkPathBudget(...args)),
-    // Exposed so other Editor-mode modules (e.g. single-file-export.js, which reads every file in
-    // the content tree in one pass) can apply the same cloud-sync-aware retry policy to their own
-    // raw File System Access reads instead of duplicating it.
-    withRetry,
-    BULK_ATTEMPTS
+    checkPathBudget: (...args) => enqueueMutation(() => checkPathBudget(...args))
   };
 })();

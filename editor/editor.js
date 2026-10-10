@@ -1688,6 +1688,11 @@
   }
 
   function serializeContentFile(info, data) {
+    if (info.kind === "slide") {
+      const path = info.key.split("/");
+      if (path.length !== 4 || !path[3]) throw new Error(`Cannot serialize a Slide with invalid key: ${info.key}`);
+      data.id = path[3];
+    }
     for (const block of (data.content && data.content.blocks) || []) {
       if ((block.type === "widget" || block.type === "dataFile") && block.name) block.name = toKebabCase(block.name);
     }

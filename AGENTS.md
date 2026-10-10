@@ -8,104 +8,63 @@ as descendent copies of the `um-agentic-ed-parent` repository.
 # Coding agent instruction sources
 
 All prompts that use instructions in this `AGENTS.md` file should have already 
-read the `AGENTS.md` file in the Parent, i.e., file `../AGENTS.md` relative to 
+read the `AGENTS.md` file in the Parent, i.e., file `../../AGENTS.md` relative to 
 the path to this Framework `AGENTS.md` file. The two files together define the 
 instructions for a complete App. 
 
-You will know if the Parent `../AGENTS.md` file has been read if you have access 
+You will know if the Parent `../../AGENTS.md` file has been read if you have access 
 to markdown section `# um-agentic-ed system overview`, which is defined in the 
 Parent instructions. If you do not have sufficient instructions you should stop, 
 take no action, and inform the user that Agent work on `um-agentic-ed-framework` 
 must be coordinated in the context of a repository cloned from `um-agentic-ed-parent`.
 
-# Coding agent roles
-- Act as a fully qualified and experience software engineer when writing 
-  framework code.
+This Framework `AGENTS.md` provides context, contracts and invariants that Agents 
+must understand and follow when working with an Editor to update app metadata or
+content. If you do not have sufficient instructions to accurately interpret the 
+system design or codebase as needed to update app metadata or content you should 
+stop and notify the user. This file does not itself provide authorization to
+make changes to the `um-agentic-ed` system structure or Framework codebase.
 
 # App usage modes
 
 The app has three page states:
 - *Learner Mode* is the default state where Learners view and interact with 
   educational content, take notes on third-level Slides, and follow up using GPT. 
-- *Editor Mode* is toggled by Ctrl-click (Cmd-click on Mac) on the app title in 
-  the header, which activates list actions and an editing pane while leaving the 
-  current route unchanged.
-  - List actions and inputs in the editing pane allow in-app content editing with 
-    immediate live updates in the Editor's browser whenever possible.
-  - Editors must give access to the root folder of their App's Parent repository 
-    via the Chrome File System Access API to save permanent changes. The Editor 
-    checks that the folder contains `src/content` and that its `app.js` declares 
-    this App's `appUuid`, and then writes only inside `src/content`.
-  - Editor Mode is only honored for `file:///` URLs and disabled when the app is
-    served by a web file server.
-  - Editor Mode is not secured; anyone can edit their local repository clone.
-  - Many Editors keep their Parent repository in a cloud-synced folder (Dropbox,
-    OneDrive, etc.). On Windows these represent every file as an NTFS reparse
-    point and can transiently fail a File System Access read/write with
-    `NotFoundError`, or Chrome's "stale interface object" error, while a
-    not-yet-downloaded file is hydrated or a directory listing is mid-sync.
-    `editor/file-access.js` centralizes all raw File System Access calls and
-    retries these two errors with real (multi-second) backoff before surfacing
-    a failure, and any new Editor Mode code must call through its shared
-    helpers rather than invoking the File System Access API directly, so this
-    resilience is never bypassed.
-  - The File System Access API never exposes the absolute OS path above the
-    folder an Editor picks, so a deeply nested project folder (again, typically
-    from a cloud-synced parent folder) can silently leave very little budget
-    before Windows' classic 260-character MAX_PATH limit, which also surfaces
-    as `NotFoundError`. Operations that lengthen a path (`splitSection`,
-    `moveSection`) call `editor/file-access.js`'s `checkPathBudget`, which
-    empirically calibrates the safe length once per session by probing a
-    throwaway file, and refuses immediately with a clear message instead of
-    failing only after attempting the real, lengthy copy.
+- *Editor Mode* provides list actions and an editing pane for organizing and
+  modifying App content, with immediate live updates in the Editor's browser
+  whenever possible and permanent changes saved to the App's Parent repository.
 - *Presenter Mode* is a variation of Learner Mode optimized for projected views
   of content with an interactive whiteboard.
 
-# Browser support
-- Learner and Presenter Modes must work on all common web browsers including 
-  Chrome, Edge, and Safari. 
-- Editor Mode requires Chrome or another browser that supports the File System 
-  Access API `showDirectoryPicker()`.
-
 # App implementation
-- The app mainly uses a static file implementation without a web server. 
-- Users open the app locally from `<app-target>.html` on their file system, i.e.,
-  as `file:///<app-target>.html`.
-- Inputs and widgets are stateless between sessions, except for values stored
-  in files or IndexedDB as defined below.
-- A web file server can serve the static app in Learner and Presenter Modes with
-  no back-end server logic.
+- App content, including assets and widgets, must work as static files without
+  back-end server logic when users open `<app-target>.html` locally as a
+  `file:///` URL. The same files may be served by a static web server in Learner
+  and Presenter Modes.
+- Inputs and widgets must be stateless between sessions except for values stored
+  in files or IndexedDB as explicitly defined below.
 
 # Code standards
-- Use HTML, CSS and Javascript.
-- Provide page content as static files.
-- Content slides may use embedded reactive Javascript widgets when it benefits 
-  learning, e.g., plots with settable interactive parameters.
-- Standard third-party code libraries are allowed but must be approved before
-  adding them to the codebase:
-  - Download third-party libraries using a pinned CDN when possible.
-  - The following libraries are APPROVED: 
-    - Use markdown-it (pinned jsDelivr CDN `<script>` in `index.html`, global
-      `markdownit`) for rendering HTML from `markdown` fields and from Question
-      block prompts, choices and feedback. It runs with raw HTML disabled, so
-      it is safe by design, and the app adds `target="umed-external"` and
-      `rel="noopener noreferrer"` to rendered links. No other rendering of
-      arbitrary text into HTML is allowed in the app.
-    - Use Chart.js for all plots and charts in `widget` blocks.
-    - Use Tabulator for all interactive data tables in `widget` blocks.
-    - Use Sortable.js for drag-and-drop list reordering, both in Editor mode (e.g.
-      the Slides menu's per-Level lists, and sidebar Category/Section lists) and
-      in widget blocks (e.g. "put these in order" exercises).
-    - Use Fabric.js for the interactive whiteboard/sketchpad; loaded when Presenter
-      mode or the Learner sketchpad is first opened.
-
-Application code should remain shared, modular and generic, using a standardized 
-data structure for all content.
+- App index and Slide files use the Javascript data structures defined below.
+  Widget files may construct browser-native HTML and use CSS and Javascript
+  compatible with the static App implementation described above.
+- Slides may use reactive Javascript `widget` blocks when interactivity benefits
+  learning, such as plots with adjustable parameters.
+- Agent-generated App content may use these approved libraries:
+  - Chart.js for all plots and charts in `widget` blocks.
+  - Tabulator for all interactive data tables in `widget` blocks.
+  - Sortable.js for drag-and-drop ordering in `widget` blocks.
+- Do not introduce another third-party library into App content without developer
+  approval. Loading and pinning shared dependencies is a system change and must
+  follow the `develop-system` skill.
+- Framework `markdown` fields and Question text are rendered through the shared
+  markdown-it implementation described under [Slide content blocks](#slide-content-blocks).
+  Do not render arbitrary text directly into HTML from App content or widget code.
 
 # Hierarchical content organization
 
 Educational content is structured in hierarchical levels:
-- An *App* is focused on one broad educational context or disipline, e.g., a 
+- An *App* is focused on one broad educational context or discipline, e.g., a 
   college course.
 - A *Subject* defines one focus area in the context of the App; Subjects are 
   always part of the tree but can be optionally be suppressed to a single 
@@ -117,13 +76,13 @@ Educational content is structured in hierarchical levels:
       required for consuming the target educational content.
     - *Core Learning* (`core-learning`) is the target educational content for 
       the typical Learner the App is intended for.
-    - *Advanced Topics* (`advanced-topics`) content is more challenging or  
+    - *Advanced Topics* (`advanced-topics`) content is more challenging or 
       nuanced information once Core Learning is mastered.
 - A *Slide* is one digestible unit of educational content that fits well on one
   display screen.
   - Slides progressively build learning across all Levels within a Section.
 - A *Block* is one portion of a Slide's contents to support different UI elements.
-  - Slide may have zero, one, or mutliple instances of any Block type.
+  - Slide may have zero, one, or multiple instances of any Block type.
 - Thus:
   - An App has one or more Subjects (even when Subject usage is suppressed).
   - A Subject has one or more Categories.
@@ -132,112 +91,95 @@ Educational content is structured in hierarchical levels:
   - A Level has zero or more Slides.
 - A Slide has a title and zero or more Blocks (Slide with no blocks are 
   suppressed in the UI).
-- A nested Subject, Category, Section, and Slide define the hierachical path to  
+- A nested Subject, Category, Section, and Slide define the hierarchical path to 
   one content unit in the App and its associated files. In contrast, Level is a 
   Slide attribute helps organize Slide navigation within a Section, and all 
   Block files and definitions are stored in the parent Slide's folder and 
   description.
-- Every Subject, Category, Section, and Slide has a kebab-case `id` that becomes
-  a folder name and so a path segment (see File tree below), separate from its
-  freely long, natural-language `title`. Each `id` is capped at 20 characters so
-  that even a deeply nested project folder (e.g. inside a Dropbox or OneDrive
-  synced folder) stays well clear of Windows' 260-character `MAX_PATH` limit;
-  `editor/file-access.js`'s `checkPathBudget` is the runtime safety net that
-  refuses an operation outright if a path would still exceed what the Editor's
-  actual folder location supports. Converting a title into an id, whether done
-  by the in-app Editor UI or by an Agent (e.g. the `import-powerpoint` or
-  `fill-or-update-section` skills), must follow the same rule so the result is
-  short, readable, and usually unique without needing the title's full wording:
-  1. Lowercase the title and split it into words (letters/digits only).
-  2. Drop common/low-value words (articles, prepositions, conjunctions, and
-     similar function words, e.g. "a", "the", "with", "and", "of", "for"), 
-     unless doing so would leave no words at all, in which case keep the 
-     original word list.
-  3. Join remaining whole words with hyphens, adding one word at a time only
-     while the result stays at or under 20 characters; stop before adding a
-     word that would exceed the limit, even if that leaves only one word.
-  4. If even the first word alone exceeds 20 characters, hard-truncate just
-     that word to 20 characters rather than producing an empty id.
-  5. If an id collides with a sibling at the same level, append `-2`, `-3`, etc.,
-     shortening the base id first if necessary so the suffixed id still fits in
-     20 characters.
-  - `app/main.js`'s `nameFromTitle` and `uniqueId` implement this rule for the
-    in-app Editor UI; apply the same rule by hand when a skill generates ids
-    directly. Abbreviating individual long words (e.g. "replication" ->
-    "repl") is acceptable for an Agent to use its judgement on when it keeps the
-    id recognizable, but is not required and is not implemented in the UI's
-    JavaScript logic.
-  - A user-typed name (e.g. the Slide/Section-break dialog's "name" field) is
-    simply slugified and is not stripped of common words, since it is the
-    Editor's deliberate choice; the dialog's input enforces the 20-character
-    limit directly (shown in its label) so this never needs truncation.
+
+# Content identifiers and paths
+
+Every Subject, Category, Section, and Slide has a kebab-case `id` that becomes
+a folder name and so a path segment (see File tree below), separate from its
+freely long, natural-language `title`. Each `id` is capped at 20 characters so
+that deeply nested App paths remain within filesystem path limits. When an Agent
+converts a title into an `id`, it must follow this rule so the result is short,
+readable, and usually unique without needing the title's full wording:
+
+1. Lowercase the title and split it into words (letters/digits only).
+2. Drop common/low-value words (articles, prepositions, conjunctions, and
+   similar function words, e.g. "a", "the", "with", "and", "of", "for"),
+   unless doing so would leave no words at all, in which case keep the original
+   word list.
+3. Join remaining whole words with hyphens, adding one word at a time only while
+   the result stays at or under 20 characters; stop before adding a word that
+   would exceed the limit, even if that leaves only one word.
+4. If even the first word alone exceeds 20 characters, hard-truncate just that
+   word to 20 characters rather than producing an empty `id`.
+5. If an `id` collides with a sibling at the same level, append `-2`, `-3`, etc.,
+   shortening the base `id` first if necessary so the suffixed `id` still fits
+   in 20 characters.
+
+An Agent may abbreviate an individual long word (e.g. "replication" -> "repl")
+when doing so keeps the `id` recognizable, but abbreviation is not required.
 
 # App layout and styles
 
-## Page layout and styling
-
-The page layout and styles are mature and will not change frequently and not 
-unless you are requested to change them. Use the existing codebase as your guide. 
+## Hierarchy and content presentation
 
 Hierarchical levels are reflected in the app:
 - When `subjectsEnabled` is true, Subjects are shown on the App landing Slide and
-  switched via a popup menu in the header, to the right of the app title. In
-  Editor Mode that menu works like the Slides menu: hover "+" buttons between and
-  around Subjects add a new Subject, and dragging reorders them.
+  selected from the header.
 - When `subjectsEnabled` is false, the Subject level remains in content storage,
   content keys, and URL paths but is hidden everywhere in the UI. The App has
   exactly one structural Subject whose id and title are both
   `app-subject`; its landing Slide has an empty `content.blocks` array.
-- The sidebar has:
-    - A top-level entry for each Category in a Subject. Category Section 
-      visibility is exclusive; inactive Categories are collapsed.
-    - Nested Section entries under each Category.
-- Levels are reflected in navigation elements at the top of the content page.
-- One Slide occupies the content pane at a time (and the editor pane in Editor mode).
+- Categories and their nested Sections are shown in the sidebar.
+- Levels are shown in navigation above the Slide content.
+- One Slide occupies the content pane at a time, so App content must remain
+  organized into digestible Slide units.
 
-App developers may brand their app in two ways:
-- Color selections for the header and sidebar declared in the `app.css` file 
-  found in the parent root (see [App identity and branding](#app-identity-and-branding)).
+Editors and Agents may brand an App in two ways:
+- Color selections for the header and sidebar declared in the `app.css` file
+  found in the Parent root (see [App identity and branding](#app-identity-and-branding)).
 - Images or other content included on Slides.
 
 ## App identity and branding
 
-Values that differ between Apps, and that the Framework cannot derive from 
-content, are declared in two small files in the Parent root. Editors set them 
-once when creating an App, by hand or with the `set-app-identity` skill:
+Values that differ between Apps, and that the Framework cannot derive from
+content, are declared in two small files in the Parent root. Editors or Agents
+set them when creating an App and update mutable values when an Editor changes
+the App's identity or branding:
 - `app.js` assigns `window.umedAppIdentity`, an object with fields:
-  - `appUuid`: immutable canonical UUID v4 of the logical App. It must be 
-    unique per App and never change; Learner notes are keyed to it in 
+  - `appUuid`: immutable canonical UUID v4 of the logical App. It must be
+    unique per App and never change; Learner notes are keyed to it in
     IndexedDB and validated against it in exported notes files.
-  - `appName`: stable, filesystem-safe kebab-case name. It supplies the 
+  - `appName`: stable, filesystem-safe kebab-case name. It supplies the
     `<appName>.notes.json` export filename and notes file metadata; `appUuid`,
     not `appName`, is authoritative when validating an imported notes file.
-  - `appTitle`: human-readable title, shown in both the app header and the 
+  - `appTitle`: human-readable title, shown in both the app header and the
     browser tab. The HTML entrypoint carries no title of its own.
   - `subjectsEnabled`: boolean indicating whether the Subject level is visible
     and editable in the App UI. Omitted values behave as `true` for backward
     compatibility. When `false`, the single structural Subject follows the
     `app-subject` invariant described above.
-  - `discipline`: the subject area Learners study, used with `learnerLevel` as 
+  - `discipline`: the subject area Learners study, used with `learnerLevel` as
     context in prompts sent to AI chat assistants.
-  - `learnerLevel`: the typical Learner the App targets, as an adjective phrase 
+  - `learnerLevel`: the typical Learner the App targets, as an adjective phrase
     that fits "I am a ___ learner" (e.g., "undergraduate", "post-graduate").
-  - `chatbotUrl`: the `https://` (or `http://`) address of the AI chatbot to open 
-    when a Learner asks about a Slide, since developers prefer different chatbots. 
-    The prompt, with the Slide text, is copied to the clipboard for pasting there. 
+  - `chatbotUrl`: the `https://` (or `http://`) address of the AI chatbot to open
+    when a Learner asks about a Slide, since developers prefer different chatbots.
+    The prompt, with the Slide text, is copied to the clipboard for pasting there.
     If blank or invalid, prompts are still copied but no chatbot is opened or linked.
-- `app.css` sets CSS custom properties on `:root` that override Framework 
-  defaults: `--umed-brand-bg`, `--umed-brand-text`, `--umed-brand-hover-bg`, 
-  `--umed-brand-border` and `--umed-brand-accent`. 
-
-The HTML entrypoint loads the Framework stylesheet (`framework.css`) before the
-Parent `app.css`, and the Parent `app.js` before any Framework script.
+- `app.css` sets CSS custom properties on `:root` that override Framework
+  defaults: `--umed-brand-bg`, `--umed-brand-text`, `--umed-brand-hover-bg`,
+  `--umed-brand-border` and `--umed-brand-accent`. Use valid CSS colors with
+  readable text and hover contrast; omit an override to retain its Framework
+  default.
 
 # Routing
 - The hierarchical path to the current content is reflected in the visible URL.
-- There should be a functioning Back button and history.
-- The URL format should use hashes followed by paths that mirror the 
-  hierarchical content tree structure:
+- Routes use hashes followed by paths that mirror the hierarchical content tree:
     - Pattern: `file:///<path>/<app-target>.html#/<subject>/<category>/<section>/<slide>`
     - Levels are not part of a path; they are a Slide-level attribute.
 - Navigating to a partial path shows its single overview, a.k.a "landing", slide:
@@ -254,22 +196,21 @@ Parent `app.css`, and the Parent `app.js` before any Framework script.
     lists links to all Subjects when Subjects are enabled.
 - An invalid route displays the error Slide in `/src/content/routing-error.js`.
 - In Learner and Presenter Modes, a Slide whose `content.blocks` array is empty is
-  skipped rather than rendered. Routing advances through the reading order until
-  it finds a Slide with at least one Block; Previous navigation searches backward.
-  Empty landing and content Slides remain present and directly accessible in
-  Editor Mode so Editors can restore their content or manage their hierarchy.
+  skipped rather than rendered. Empty landing and content Slides remain present
+  and directly accessible in Editor Mode so Editors can restore their content or
+  manage their hierarchy.
 
 # Searching
-- Keywords are individual deduplicated lower-cased words extracted from content  
-  Slide `slide.js` files. They are not taken from Subject, Category or Section  
-  landing slide files `subject.js`, `category.js` or `section.js`. Slide text 
-  should be split at whitespace and hyphens when extracting candidate keywords. 
-  All punctuation should be removed from the outsides of words, but not when it 
-  appears within a candidate keyword; thus, "Height, and Width!" becomes keywords 
-  "height" and "width", but "A(B)C and XYZ:123" become keywords "a(b)c" and 
-  "xyz:123". Slide text is defined as any word the Learner would see in the 
-  content pane, but does not include any code elements used to generate that 
-  visible text or GPT prompts. Thus:
+- Search keywords stored in `content-index.js` are individual, deduplicated,
+  lowercase words extracted from content Slide `slide.js` files. They are not
+  taken from Subject, Category, or Section landing files (`subject.js`,
+  `category.js`, or `section.js`).
+- Split Slide text at whitespace and hyphens when extracting candidate keywords.
+  Remove punctuation from the outsides of words but not from within a candidate
+  keyword; thus, "Height, and Width!" becomes "height" and "width", while
+  "A(B)C and XYZ:123" becomes "a(b)c" and "xyz:123".
+- Slide text is any word the Learner would see in the content pane, but excludes
+  code elements used to generate that visible text or GPT prompts. Thus:
   - Included elements are:
     - Slide title
     - text and markdown lead-ins
@@ -277,67 +218,16 @@ Parent `app.css`, and the Parent `app.js` before any Framework script.
     - link labels
     - data-file prompts
     - question prompts, choices, and feedback
-    - widget block markdown/instructions shown to Learners
+    - widget block markdown shown to Learners
   - Excluded elements are:
     - retained instructions blocks
     - widget JavaScript source, internal identifiers, and data/code values
-    - Subject, Category and Section landing slides
+    - Subject, Category, and Section landing slides
     - GPT follow-up prompts
-- Users type in the search box to find content with matching keywords. The search
-  query should be trimmed of leading and trailing whitespace, then split on
-  whitespace and hyphens with punctuation removed by the same rules as for keywords. 
-  Each resulting substring is taken as the prefix of a searchable keyword, up 
-  to an entire keyword. Match results from each substring are intersected to produce  
-  the final match list to support multi-word queries that progressively refine 
-  lists as more terms are added.
-- Search queries should:
-  - Activate after at least three characters are entered, and any query term less
-    than three characters should be ignored. Thus, indexed keywords will also be 
-    at least three characters long.
-  - Not match on trivial or low complexity queries like common English words 
-    including but not limited to articles, prepositions, and frequently used verbs. 
-    All such words should be omitted from keyword indices to keep them efficient. 
-    Indexed keywords should be specific to the unique content of the app.
-  - Match by comparing the requested search box text to the beginning of indexed 
-    content keywords in a case-insensitive manner. Indices and code strategies
-    should be constructed to optimize start-of-word matching.
-  - Match sensitively such that any high-value word on any Slide should exist
-    in the keyword index for search matching, although the search term may only 
-    generate Subject, Category or Section matches if too many Categories, Sections 
-    or Slides match as described below.
-  - Use debouncing to prevent too-frequent recalculation of the match list.
-- A search box match list should be generated in response to user queries that 
-  provides links with valid URLs at all helpful tree levels according the 
-  the following rules:
-  - Show at most the hierarchical tree levels Subject, Category, Section and Slide.  
-    How many of these levels are shown for a current search match is determined by
-    the number of sub-elements that would be displayed.
-    - If a Section has more than three slides that match a search prefix, then
-      only Subject, Category and Section should be included in the match list for  
-      that Section, but not the numerous Slides.
-    - If a Category has three or more Sections that match, then only the Subject 
-      and Category should be included in the match list for that Category.
-    - If a Subject has three or more Categories that match, then only the Subject 
-      should be included in the match list for that Subject.
-    - The previous rules should be interpreted per Subject, Category and Section,
-      e.g., it is possible that one Section would have specific Slides listed,   
-      while another would not list Slides in the match list because it had more  
-      then three matching Slides.
-    - The previous rules dictate the behavior of prefixes and keywords that are:
-      - common within the app's specific content
-      - but not in general language. 
-      At the other extreme, some keywords (and sufficiently long search entries) 
-      will be  highly unique and may generate just one or two Slide matches that 
-      should be communicated with full Subject, Category, Section and Slide in 
-      the match tree. Finding all such matches is important to effective searching.
-  - Subject, Category, Section and Slide in the search match list should occupy 
-    at most one line of text, using an ellipsis overflow for long entries.
-- Because matching keywords are not themselves displayed in the match list,
-  and because any single instance on a Slide is sufficient to generate a query
-  match, keyword stores should be maintained as deduplicated lowercase strings.
-- When Subjects are suppressed, search-result links retain the `app-subject` id
-  in their URLs but the result tree begins with Categories. Subject labels
-  and Subject-only collapsed results are not shown.
+- Content Agents must include only keywords of at least three characters and omit
+  trivial, low-complexity words such as articles, prepositions, and frequently
+  used verbs. Indexed keywords should be specific to the unique content of the
+  App.
 
 # File tree
 
@@ -366,27 +256,6 @@ repository that wraps this instance of the `um-agentic-ed-framework` repository.
   um-agentic-ed-framework/  A Submodule clone of this `um-agentic-ed-framework` repository
 ```
 
-## `/src/um-agentic-ed-framework/` file tree
-
-```text
-/src/um-agentic-ed-framework/
-  AGENTS.md    This file
-  app/         main.js: application bootstrap, routing, rendering and global state
-  components/  Shared UI components and services
-  editor/      Files that support Editor mode
-  styles/      framework.css: the Framework stylesheet, in numbered sections
-```
-
-Script loading: `index.html` loads the Framework scripts the Learner view needs
-(components and `app/main.js`). Editor mode and the whiteboard/sketchpad are used
-only occasionally, so `main.js` loads them on first use instead:
-- Turning on Editor mode (Ctrl-click on the app title) loads `editor/file-access.js` 
-  and `editor/editor.js`.
-- Entering Presenter mode or opening the Learner sketchpad loads Fabric.js and
-  `components/presenter-whiteboard.js`.
-New Framework code that is only needed in one of these modes should be loaded the 
-same way, not added to `index.html`.
-
 ## `/src/content/` file tree
 
 ```text
@@ -406,74 +275,42 @@ same way, not added to `index.html`.
         _trusted_sources/  Folder with files to use as prioritized context for generating Section Slides
         <slide>/           Folder for a fourth-level Slide chosen by content page navigation
           slide.js         Single Slide Javascript file with structured educational content for display
-          <asset>.jpg      Slide-specific asset files reside in the same folder as their slide.js
-          <widget>.js      Agent-authored plot or table matching the widget host contract (see Widget content blocks)
+          <asset>.xxx      Slide-specific asset files reside in the same folder as their slide.js
+          <widget>.js      Agent-authored plot or table matching the widget host contract (see Widget file generation)
 ```
 
 Section-level `AGENTS.md` files provide guidance on how to populate educational 
 content and build widgets, but the Parent and Framework `AGENTS.md` files remain
 the authoritative instructions for app structure.
 
-Section titles, descriptions, and other Section-level metadata not tied to
-individual Slides are stored in `content-index.js`.
+Section titles and other Section-level metadata not tied to individual Slides 
+are stored in `content-index.js`.
 
 # Editing permissions and locks
 
-Executing Agent instructions might require you to make changes to one or more of:
+## Change authorization
 
-1. App metadata and branding files in the Parent App root folder:
-   - `AGENTS.md` sections:
-     - `# Project overview`
-     - `# Educational content generation guidelines`
-   - `app.css`
-   - `app.js`
-   - `LICENSE`
-   - `LICENSE-CC-BY-NC-4.0`
-   - `README.md`
-2. Educational content in the Parent App `src/content` folder.
-3. `um-agentic-ed` system structure files in the Parent App root folder:
-   - `.github/skills`
-   - `.gitignore`
-   - `.gitmodules`
-   - `AGENTS.md`, all sections not explicitly listed in item 1
-   - `index.html`
-4. App structure and execution code in this Framework, in folder
-   `src/um-agentic-ed-framework`.
+- App-specific changes do not require system-developer authorization. These
+  include educational content under `src/content`; `app.js`; `app.css`; licenses;
+  `README.md`; and the Parent `AGENTS.md` sections `# Project overview` and
+  `# Educational content generation guidelines`.
+- System changes require the user to invoke the `develop-system` skill. These
+  include `.github/skills`, `.gitignore`, `.gitmodules`, the HTML entrypoint,
+  system-governed portions of the Parent `AGENTS.md`, and files under
+  `src/um-agentic-ed-framework`.
+- The skill authorizes only the system changes within the accompanying brief. If
+  a proposed change would break compatibility with existing Apps, identify the
+  impact and obtain explicit authorization for that break before proceeding.
 
-## Required permission to change app functionality
+## Agent project lock
 
-User briefs that would lead to changes of type 3, `um-agentic-ed` system structure
-files, or type 4, App structure and execution code, must be confirmed with the
-user before execution with the message: "Executing this action requires changes
-to `um-agentic-ed` system code files that should only be made by system
-developers." If the proposed changes would break compatibility with existing
-Apps, the confirmation request must also say so. Continue only if the user
-actively confirms the system-altering action in advance or via your prompt.
+Use `APP_LOCK` in the Parent root to prevent overlapping Agent and Editor Mode
+project updates. The lock is cooperative and is not a security boundary.
 
-Changes of type 1, App metadata and branding files, and type 2, Educational
-content, do not require this additional confirmation because they change a
-specific App contents rather than system-defined App behavior.
-
-## Project locking during editing
-
-To prevent an Editor and an Agent controlled by that Editor from attempting to
-modify the same App at the same time, Agents and Editor Mode must use the project
-lock defined below. Editors are expected to have their own project clone and be
-the only person editing it. The lock is a cooperative safety measure against
-accidental overlapping Agent and Editor Mode operations; it is not a security
-boundary or a multi-user concurrency system.
-
-### Project lock
-
-Before changing any project file other than the lock file itself, an Agent or
-Editor Mode operation must acquire ownership of file `APP_LOCK` in the Parent
-root folder. This includes creating, writing, moving, renaming, or deleting
-content, assets, index entries, project metadata, system files, or Framework
-files. Creating, validating, and removing `APP_LOCK` as specified here are the
-only exceptions to the requirement to acquire the lock before a project
-mutation. They are also the sole exceptions to the rule that Editor Mode may
-only write inside `src/content`; the folder-access UI must disclose this
-root-level lock-file access.
+Before creating, writing, moving, renaming, or deleting any project file, an
+Agent must atomically acquire `APP_LOCK`. Creating, validating, and removing the
+lock itself are the only exceptions. Read-only planning and evaluation do not
+require the lock.
 
 `APP_LOCK` must contain:
 
@@ -481,79 +318,34 @@ root-level lock-file access.
 - The acquisition time as an ISO 8601 timestamp.
 - A short description of the operation.
 
-An Agent must acquire `APP_LOCK` using an operating-system-level atomic
-create-if-absent operation, not a separate existence check followed by an
-ordinary create or overwrite. If atomic creation reports that the file already
-exists, the Agent must make no project changes and must tell the user that
-another editing operation may be active.
-
-The browser File System Access API has no atomic create-if-absent operation, so
-Editor Mode cannot provide strict atomic exclusion against an Agent process.
-Editor Mode must first obtain an exclusive Web Lock, keyed by the App's
-`appUuid`, for the complete logical operation. This serializes cooperating
-Editor Mode tabs. While holding the Web Lock, it must check for an existing
-`APP_LOCK`; if one exists it must make no project changes. Otherwise it may
-create its cooperative `APP_LOCK`, then immediately reread it and verify its
-owner token before mutating the project. Editor Mode must never knowingly
-overwrite an existing lock. This protocol has an unavoidable small acquisition
-race with an Agent because of the browser API limitation, and must not be
-described as strict cross-process atomic locking. If Web Locks or an equivalent
-cross-tab exclusion mechanism is unavailable, Editor Mode must refuse project
-mutations rather than silently operate without browser-tab coordination.
-
-When acquisition fails, the existing lock information may be displayed when
-readable. A pre-existing lock is never considered stale or removed
-automatically; only an explicit user instruction may authorize its removal.
-
-The owner must retain its token for the whole operation. Whether the operation
-succeeds or fails, it must attempt to release the lock as its final cleanup step,
-but only after re-reading `APP_LOCK` and verifying that the stored token still
-matches its own. It must never remove a lock owned by another operation. An
-operation must validate ownership before each destructive phase and before
-release. If it loses ownership, it must stop making changes, perform only cleanup
-that cannot affect another owner's work, leave the foreign lock in place, and
-report the condition.
-
-Agents and Editor Mode acquire the lock after receiving all required
-authorization and collecting any user choices, and immediately before the first
-project-related mutation. Read-only planning and preflight may occur before
-acquisition. In Editor Mode, unsaved typing is not a project mutation and does
-not acquire the lock; the Save or other persistence action begins the logical
-operation. If an Editor interaction changes in-memory project state before
-persisting it, acquisition must precede that in-memory change.
-
-One lock must cover the entire logical operation rather than individual file
-system calls. It must remain held throughout all iterative writes, deletions,
-in-memory reconciliation, rollback, validation, and cleanup, including
-long-running multi-file operations. Editor Mode must prevent another mutating UI
-action while the operation is active and must retain both its Web Lock and
-`APP_LOCK` until final cleanup is complete and the UI is ready to return control
-to the user. Lock acquisition, ownership-validation, and release failures must be
-shown to the Editor in a dialog.
-
-Likewise, an Agent must retain one lock across the complete authorized execution,
-including all related file edits, generated assets, formatting, corrective
-changes, mutation-capable verification, and cleanup. It releases the lock only
-when that execution has finished or cannot safely continue.
-
-Read-only evaluation, Learner Mode, IndexedDB note autosaves, and ordinary
-browser downloads that do not alter the project tree do not acquire `APP_LOCK`.
-Any export or import that writes into the project tree does acquire it.
+- Acquire the lock with an operating-system-level atomic create-if-absent
+  operation, never a separate existence check followed by creation or overwrite.
+- Acquire it after receiving authorization and collecting user choices, and
+  immediately before the first project mutation.
+- If acquisition reports that `APP_LOCK` exists, make no project changes and
+  tell the user another editing operation may be active. Never treat an existing
+  lock as stale or remove it without explicit user authorization.
+- Keep the owner token for the entire logical operation. One lock must cover all
+  related edits, generated assets, formatting, corrective changes,
+  mutation-capable verification, rollback, and cleanup.
+- Verify that `APP_LOCK` still contains the Agent's token before each destructive
+  phase and before release. If ownership is lost, stop changing files, perform
+  only cleanup that cannot affect the other owner, leave its lock in place, and
+  report the condition.
+- Whether the operation succeeds or fails, attempt final release only after
+  rereading `APP_LOCK` and confirming the token still matches. Never remove a
+  lock owned by another operation.
 
 # Slide content file format
 
-Content files:
-- Do not need to be human readable; all human editing is done in the running app.
-- Must be easily rendered into both Learner Slide view and Editor inputs using 
-  shared, generic rendering code, not bespoke per-Slide code.
-- Should be optimized for low page load latency.
-- Must be loadable by a web browser accessing local files without hitting CORS 
-  restrictions.
-- Are therefore stored as one Javascript file per Slide loaded via
-  `<script src="/src/content/<subject>/<category>/<section>/<slide>/slide.js">`,
-  which assigns the Slide object to `window.umedAppContent['<subject>/<category>/<section>/<slide>']`.
-- Landing Slides (`subject.js`, `category.js`, `section.js`) are loaded the same way
-  and assigned to the key made of their folder path, i.e.,
+## Content files and keys
+
+- Store each content Slide as
+  `/src/content/<subject>/<category>/<section>/<slide>/slide.js`. The file assigns
+  its Slide object to
+  `window.umedAppContent['<subject>/<category>/<section>/<slide>']`.
+- Landing Slides (`subject.js`, `category.js`, `section.js`) assign their Slide
+  object to the key made from their folder path, i.e.,
   `window.umedAppContent['<subject>']`, `window.umedAppContent['<subject>/<category>']`
   and `window.umedAppContent['<subject>/<category>/<section>']`. The App landing and
   error Slides use the keys `app-overview` and `routing-error`.
@@ -599,19 +391,23 @@ type-specific fields:
   ordered/unordered lists, GFM tables, blockquotes, horizontal rules, links
   (opened in a new `umed-external` tab) and auto-linked URLs. A single newline
   renders as a line break. Raw HTML is not allowed (it is shown as literal
-  text), and Markdown images (`![]()`) are never loaded and show only their alt text; use an `image` block,
-  which carries alt text and attribution. Question block `prompt` fields
-  render as block Markdown, and Question choice text and feedback render as
-  inline-only Markdown.
+  text), and Markdown images (`![]()`) are never loaded and show only their alt 
+  text; use an `image` block, which carries alt text and attribution. Question 
+  block `prompt` fields render as block Markdown, and Question choice text and 
+  feedback render as inline-only Markdown.
 - `image`, `link`, `widget`, and `dataFile` blocks additionally accept an
   optional `markdown` field, edited and rendered identically to the `text`
-  block's `markdown` above, but shown as the first input row in the Editor
-  pane and rendered immediately before that block's own content in the
-  Slide view. It lets an Editor attach short lead-in text that stays
-  attached to, and reorders together with, the rest of that block's content.
-- `image` block: `src` (relative path), `alt` (required alt text), `maxWidths`
+  block's `markdown` above. It renders immediately before that block's own
+  content and lets an Editor attach short lead-in text that stays attached to,
+  and reorders together with, the rest of that block's content.
+- `image` block: `fileName` (the authoritative space- or comma-delimited list
+  of image filenames or URLs), `src` (a legacy compatibility alias used only
+  when `fileName` is absent), `imageSource` (`"slide"` for assets in the Slide
+  folder or `"shared"` for assets in `src/content/assets/images`; defaults to
+  `"slide"`), `label` (an optional visible caption), `alt` (required alt text),
+  `maxWidths`
   (a space or comma-delimited list of raw CSS `max-width` values, e.g.
-  `200px, 50%`, applied respectively to each file in `src`/`fileName`; a
+  `200px, 50%`, applied respectively to each file in `fileName`; a
   single value applies to every image on the block; an empty, blank, or
   invalid-CSS entry falls back to `50%` for that image), `center` (a boolean;
   when true, centers the wrapper containing the block's image set; when false
@@ -620,19 +416,22 @@ type-specific fields:
 - `link` block: An external web site URL that opens via an `<a>` tag into a new 
   browser tab named `umed-external`, with a `label` and a `url` field for 
   constructing its tag.
-- `widget` block: `name` field used for widget naming of `<widget>.js` files, 
+- `widget` block: a kebab-case `name` field used for widget naming of
+  `<widget>.js` files,
   `maxWidth` field with a raw CSS `max-width` value applied to the widget's
   wrapper (an empty, blank, or invalid-CSS value falls back to `90%`),
   `center` (a boolean; when true, centers the widget wrapper; when false or
   omitted, left-aligns it),
   `instructions` field filled with Agent markdown instructions by an Editor in 
   the app or by an Agent during automated content generation, and an 
-  automated `instructionsUpdatedAt` ISO 8601 timestamp (not exposed in the 
-  Editor UI) set whenever `instructions` changes. See Widget content blocks 
-  below for the runtime contract `<widget>.js` files must follow and how 
+  automated `instructionsUpdatedAt` ISO 8601 timestamp (not exposed in the
+  Editor UI) set whenever `instructions` changes. See
+  [Widget file generation](#widget-file-generation) for the runtime contract
+  `<widget>.js` files must follow and how
   `instructionsUpdatedAt` is used to detect a stale `<widget>.js`.
-- `dataFile` block: a `name` field is the internal code identifier of a data file 
-  loaded for access by widgets, an `extensions` field is a space or comma-delimited 
+- `dataFile` block: a kebab-case `name` field is the internal code
+  identifier of a data file loaded for access by widgets, an `extensions` field
+  is a space or comma-delimited
   list of allowed file extensions to load, and a `prompt` field with short text
   to show to ask for the file.
 - `instructions` block: an `instructions` field containing retained instructions
@@ -653,8 +452,6 @@ type-specific fields:
   folder. On the Section landing slide, the files are rendered to Learners as
   links at the bottom of the slide contents, after an `<hr>` and explanatory
   text, but before bottom navigation. They remain excluded from GPT prompt text.
-  Editors add, overwrite, and remove these files through the block's file
-  controls using the File System Access API.
 - `divider` block: renders an `<hr>` to visually separate Blocks on a Slide. It
   has no fields beyond `type` and does not accept a `markdown` lead-in.
 - `gptFollowup` block: a Slide-only `questions` array of short learner-facing
@@ -681,9 +478,6 @@ type-specific fields:
   - Exactly one choice should have `correct: true`.
   - Answer feedback below the question is a fixed behavior of the shared
     Question component and is not configurable per-block.
-  - In Editor mode, a Question block's `choices` are reordered via their own
-    nested sortable list, itself nested inside the Slide's outer sortable
-    list of Blocks.
 
 # Content index file format and behavior
 
@@ -691,10 +485,10 @@ type-specific fields:
 Slide metadata. It allows the app to build the sidebar, validate routes, and 
 search content without loading every `slide.js` file, preserving load efficiency.
 
-## Loading and structure
-- Loaded once via `<script src="/src/content/content-index.js">`, which
-  assigns the index to `window.umedAppContentIndex`.
-- Structured as a nested object mirroring the content hierarchy:
+## Index structure
+
+`content-index.js` assigns a nested object mirroring the content hierarchy to
+`window.umedAppContentIndex`:
 
 ```js
 window.umedAppContentIndex = {
@@ -746,8 +540,8 @@ window.umedAppContentIndex = {
   and default "first Section"/"first Slide" navigation targets, using the
   same spaced-increment convention as Slide `order`.
 - `slides[].keywords` is an Agent-generated array of searchable terms used
-  without loading full Slide content. Its exact extraction, normalization,
-  included Slide elements, and prefix-match behavior are governed by
+  without loading full Slide content. Its extraction, normalization, and
+  included Slide elements are governed by
   [Searching](#searching): every entry is one deduplicated lowercase word, and
   Slide-title words are included. It is not an Editor-authored field and does
   not include Category/Section landing-slide content or retained instructions.
@@ -760,8 +554,7 @@ window.umedAppContentIndex = {
   for navigation, routing, and search are present.
 - Subject ids become top-level folders in `src/content` and content keys, so
   `assets`, `app-overview` and `routing-error` are reserved and must not
-  be used as Subject ids; Editor Mode adds a numeric suffix if a title would
-  produce one.
+  be used as Subject ids.
 - A Subject-suppressed App has exactly one Subject entry. Its `id` and `title`
   both equal `app-subject`, its matching `subject.js` landing Slide has no
   Blocks, and all Category, Section, and Slide routes still begin with its id.
@@ -771,20 +564,6 @@ window.umedAppContentIndex = {
 - Every hierarchy and content-Slide UUID in the index is the same immutable UUID
   stored in its corresponding content file and provides stable Slide identity when
   routes change.
-
-## Behavior
-- On app load, the index is fetched immediately (before any Slide content),
-  and drives:
-  - Sidebar Category/Section rendering.
-  - Route validation (a hash path is valid only if it resolves to an entry
-    in the index; otherwise the error Slide is shown).
-  - Default-slide resolution for partial routes (lowest `order` match within
-    the requested Category/Section).
-  - Search suggestions (prefix-matching indexed content-Slide keywords, then
-    deriving Category and Section result links from those Slide matches).
-- Individual `slide.js` files are only loaded on demand, when a Learner
-  navigates to that specific Slide (see Routing and Slide content file
-  format sections).
 
 ## Maintaining the index
 - The index must stay synchronized with the actual Slide files on disk.
@@ -798,44 +577,8 @@ window.umedAppContentIndex = {
   Slide's `contentUpdatedAt`, generate the normalized `keywords` list required
   by [Searching](#searching), and
   set the matching index entry's `keywordsUpdatedAt` to the same timestamp.
-  The [`index-slides`](../../.github/skills/index-slides/SKILL.md) skill performs this
-  maintenance in bulk and validates the disk/index relationship.
-- When an Editor uses in-app Editor mode to save a change that creates, edits, 
-  reorder, or deletes a Slide, the app must update both the Slide's `slide.js` 
-  file and `content-index.js` together via the File System Access API, so the 
-  two stay in sync.
-- In Editor Mode, the Slides menu's hover "+" button opens a dialog for the new
-  Slide's title and name. Its "Create a new section break with this slide"
-  checkbox (unchecked by default) relabels the dialog for a Section. When
-  approved with "Add Section Break", the Slide becomes the `section.js` landing
-  Slide of a new Section placed right after the current Section in its Category;
-  every Slide at or after the "+" position (across Levels) moves into the new
-  Section with its Level and order unchanged, and earlier Slides stay. Moved Slide
-  folders are copied with their content keys rewritten, `content-index.js` is
-  saved, and only then are the original folders removed. Slides with unsaved
-  changes must be saved or discarded first.
 - `content-index.js` is not hand-maintained independently of Slide files; it
   is always a generated reflection of them.
-
-# Learner note taking
-
-To facilitate active learning a notepad can be opened in Learner mode where users
-can record text or switch to a Sketchpad to draw about content Slides and App,
-Subject, Category, and Section landing Slides. Only one note-taking view is visible
-at a time. Presenter whiteboard and Learner Sketchpad drawings are the same drawing
-for a Slide. Drawings retain fixed object coordinates and pixel dimensions as the
-canvas changes size; Fit Drawing may temporarily scale a drawing down to show it
-completely in either mode and must disable editing while fitted.
-
-Once opened, the notepad remains open as the Learner navigates among Slides until
-explicitly closed. Each UUID-keyed note record contains both a text field and a
-Fabric.js drawing field, either of which may be empty. Notes are cached in memory
-for immediate interaction and saved automatically to IndexedDB using the immutable
-App and Slide UUIDs, so they persist across browser sessions without modifying
-content files. Learners may export an unencrypted `<appName>.notes.json`
-archival/shareable copy containing both modalities. A valid same-App notes file can
-either atomically replace the Learner's saved notes or be viewed temporarily as
-read-only shared notes without altering their own.
 
 # Educational content generation guidelines
 
@@ -849,7 +592,7 @@ Agent-generated content must be drawn from high-quality information sources:
   - Should be prioritized when generating content, but should not be considered
     as exclusive context and can be supported by other content as outlined above.
   - Are not pushed to servers with the repository due to settings in `.gitignore`.
-- Additional App-specific content guidance is provide by `../AGENTS.md`, the 
+- Additional App-specific content guidance is provide by `../../AGENTS.md`, the 
   specific content generation prompt, and any applicable `instructions` blocks.
 
 When generating content for a Section, you should:
@@ -872,21 +615,21 @@ When generating content for a Section, you should:
     - Providing educational content on Slides in the app; Slides should always
       be fully understandable as an educational unit on their own.
     - Providing guidance on ways to explore that content via GPT chat.
-  - GPT follow-up prompt suggestions are not a required Slide block, but many  
+  - GPT follow-up prompt suggestions are not a required Slide block, but many 
     Slides are expected to benefit from one to three suggestions. Never have more 
     than five suggestions.
   - Keep suggestions short, typically one concise sentence or line of text. The
     suggested follow-up prompt will appear in generated prompt text after a 
     standard GPT app context and the Slide text, so follow-up suggestions only 
     need to provide a specific additional exploration of a Slide-related topic.
-  - Suggesions should remain topical to the Slide and not go off on unrelated 
+  - Suggestions should remain topical to the Slide and not go off on unrelated 
     tangents. Appropriate suggestions might explore sub-heading-level content 
     the Slide omitted for brevity, more advanced considerations, nuances or 
     tricky exceptions, etc. 
 
 ## Image content blocks
 - Agents may generate new image content as well as text.
-- You should generate line drawings and related art in SVG format compatible  
+- You should generate line drawings and related art in SVG format compatible 
   with manipulation Adobe Illustrator.
 - Some images might naturally require bitmap rendering in JPG format, e.g., 
   photographic content.
@@ -895,14 +638,18 @@ When generating content for a Section, you should:
   - Prefer generated over linked images to minimize copyright issues, but do
     not attempt to recreate highly complex renderings.
 
-## Widget content blocks
+# Widget file generation
+
 - Agents generate reactive Javascript widgets such as interactive plots and tables.
+- A widget block's `name` must be kebab-case because it also determines the
+  `<widget>.js` filename and the widget registry key.
 - Widgets may be conceived of autonomously by agents or prompted by Editors. 
   In either case, the widget block's `instructions` should carry the Agent 
   instructions for creating the widget along with `AGENTS.md`.
-- Approved widget libraries are loaded once via pinned CDN `<script>`/`<link>`
-  tags in `<app-target>.html` and are available globally to every `<widget>.js`
-  file:
+
+## Libraries and runtime contract
+
+- These approved libraries are available globally to every `<widget>.js` file:
   - **Chart.js** for all plots and charts.
   - **Tabulator** for all interactive data tables.
   - **Sortable.js** for drag-and-drop ordering of list items, e.g., in
@@ -926,9 +673,6 @@ When generating content for a Section, you should:
     }
   };
   ```
-  - `src/um-agentic-ed-framework/components/widget-host.js` is the only app code that loads
-    `<widget>.js` files and calls `init`/`destroy`; it is shared, generic
-    infrastructure and must not contain any per-widget logic.
   - The Framework styles offer two optional helper classes for a widget's input
     controls: wrap them in an element with class `widget-controls` (a wrapping
     row) and give each labelled input a `widget-control` label.
@@ -936,12 +680,15 @@ When generating content for a Section, you should:
     slider rebuilding `chart.data` and calling `chart.update()`, or a
     Tabulator column header click). Widgets do not communicate with other
     widgets or Slides.
-  - `widget>.js` files are created by the Agent and contain:
+  - `<widget>.js` files are created by the Agent and contain:
     - The code and logic to populate the UI with the plot or table and the
       inputs required to make it interactive.
     - Bespoke data required to create the plot or table that cannot be calculated 
       by the widget. Data that can be calculated should not usually be included 
-      in `widget>.js` in favor of real-time derivation by the web browser.
+      in `<widget>.js` in favor of real-time derivation by the web browser.
+
+## Generation workflow and staleness
+
 - Widget generation is not a live, in-app edit like other block types, because
   the running web app cannot execute an Agent on the Editor's computer:
   - Editing a widget block's `name` or `instructions` field in Editor mode only
@@ -951,9 +698,6 @@ When generating content for a Section, you should:
     the running app, e.g. in this coding environment) with the saved
     `instructions` and this `AGENTS.md` to create or update the `<widget>.js`
     file on disk.
-  - Until an Agent has authored a matching `<widget>.js` file, the Slide shows
-    a placeholder noting the widget has not yet been generated, instead of an
-    error.
 - Detecting whether a `<widget>.js` file is stale relative to its Slide's
   saved instructions:
   - Every widget block carries an automated `instructionsUpdatedAt` ISO 8601
@@ -967,33 +711,30 @@ When generating content for a Section, you should:
     the saved instructions have not changed since the file was last
     generated, so the Agent should confirm with the Editor before
     regenerating anyway, since nothing indicates the file needs it.
-- Editors prompt an Agent to create or update a `<widget>.js` file by running
-  [`create-or-update-widget`](../../.github/skills/create-or-update-widget/SKILL.md)
-  in VS Code chat, pointed at the target Slide and widget.
 
-## DataFile content blocks
+# DataFile blocks and widget data
+
 - Widgets may access data uploaded by a user from an Upload File link defined by 
   block type `dataFile`. 
+- Each `dataFile` block's `name` must be kebab-case; widget instructions and
+  widget code use that exact name to identify the uploaded file.
 - Any number of uniquely named files may be defined for use by one or more 
   widgets, across one or more Slides. The `dataFile` block only needs to be found
   on one Slide to load the data, but then can be used over multiple slides, i.e.,
   loaded data will persist in memory for the lifetime of the user's browser session.
 - Authors of widget `instructions` must declare the names of the data file(s) 
   they require and the file format so data can be parsed.
-- On the Slide itself, a `dataFile` block renders its `prompt` text followed
-  inline by a small upload icon button (the same icon used for the Editor
-  pane's image upload button); clicking it opens a native file picker
-  restricted to `extensions`. 
-- `src/um-agentic-ed-framework/components/data-files.js` is shared, generic infrastructure providing
-  `window.umedDataFiles`, a session-lifetime, in-memory registry of uploaded
-  files keyed by a `dataFile` block's `name`. It is the only app code that
-  stores or looks up an uploaded file, and it never touches disk. A
-  `<widget>.js` file reads a Learner-uploaded file via:
+- A `dataFile` block renders its `prompt` with an upload control restricted to
+  `extensions`.
+- Widget files access uploaded files through `window.umedDataFiles`, a
+  session-lifetime, in-memory registry keyed by the `dataFile` block's `name`
+  that never writes uploaded data to disk:
   - `window.umedDataFiles.get(name)` \u2192 the raw `File`, or `undefined` if not
     yet uploaded.
   - `window.umedDataFiles.getText(name)` / `.getArrayBuffer(name)` \u2192 a
     Promise for the file's contents, for widgets to parse themselves (no CSV
-    or similar parsing library is approved; see Widget content blocks).
+    or similar parsing library is approved; see
+    [Widget file generation](#widget-file-generation)).
   - `window.umedDataFiles.onChange(name, callback)` \u2192 registers
     `callback(file)` for whenever `name`'s file is uploaded or replaced,
     calling it immediately if a file is already loaded (e.g. uploaded from a
