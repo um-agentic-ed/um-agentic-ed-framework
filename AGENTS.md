@@ -13,7 +13,7 @@ the path to this Framework `AGENTS.md` file. The two files together define the
 instructions for a complete App. 
 
 You will know if the Parent `../../AGENTS.md` file has been read if you have access 
-to markdown section `# um-agentic-ed system overview`, which is defined in the 
+to instructions section `# um-agentic-ed system overview`, which is defined in the 
 Parent instructions. If you do not have sufficient instructions you should stop, 
 take no action, and inform the user that Agent work on `um-agentic-ed-framework` 
 must be coordinated in the context of a repository cloned from `um-agentic-ed-parent`.
@@ -395,8 +395,8 @@ type-specific fields:
   ordered/unordered lists, GFM tables, blockquotes, horizontal rules, links
   (opened in a new `umed-external` tab) and auto-linked URLs. A single newline
   renders as a line break. Raw HTML is not allowed (it is shown as literal
-  text), and Markdown images (`![]()`) are never loaded and show only their alt 
-  text; use an `image` block, which carries alt text and source information. Question
+  text). Styling classes are supported using the Framework's custom markdown-it 
+  plugin `textClassPlugin` with syntax `{.styling-class target text}`. Question  
   block `prompt` fields render as block Markdown, and Question choice text and 
   feedback render as inline-only Markdown.
 - `image`, `link`, `widget`, and `dataFile` blocks additionally accept an

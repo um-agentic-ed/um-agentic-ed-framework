@@ -2440,14 +2440,17 @@
 
   // The only place free-text Editor entries become HTML (see AGENTS.md). markdown-it runs with raw
   // HTML disabled and its built-in link validation (blocks javascript:/vbscript:/most data: URLs).
-  // Markdown images are never loaded (shown as their alt text) because image blocks carry the
-  // required alt text and source information.
   let markdownRenderer = null;
 
   function getMarkdownRenderer() {
     if (markdownRenderer || typeof window.markdownit !== "function") return markdownRenderer;
     const renderer = window.markdownit({ html: false, linkify: true, breaks: true, typographer: false });
-    renderer.renderer.rules.image = (tokens, index) => escapeHtml(tokens[index].content);
+    if (typeof window.markdownitSup === "function") renderer.use(window.markdownitSup);
+    if (typeof window.markdownitSub === "function") renderer.use(window.markdownitSub);
+    renderer.use(textClassPlugin);
+    // uncomment to suppress image rendering in favor of showing the alt text
+    // inline markdown images are currently enabled, but image blocks support more features
+    // renderer.renderer.rules.image = (tokens, index) => escapeHtml(tokens[index].content); 
     const defaultLinkOpen = renderer.renderer.rules.link_open
       || ((tokens, index, options, env, self) => self.renderToken(tokens, index, options));
     renderer.renderer.rules.link_open = (tokens, index, options, env, self) => {
@@ -2463,6 +2466,37 @@
     return String(text).replace(/[&<>"']/g, char => ({
       "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
     })[char]);
+  }
+  // Plugin to add one styling class to markdown target text.
+  // Syntax {.class target text} wraps `target text` in a <span> with the given class.
+  // Many useful styles are in `src/um-agentic-ed-framework/styles/framework.css`
+  // and custom app styles can be added to `app.css`.
+  function textClassPlugin(md) {
+    const pattern = /^\{\.([A-Za-z_][A-Za-z0-9_-]*)[ \t]+([\s\S]*?)\}/;
+    function textClassRule(state, silent) {
+      if (!state.src.startsWith("{.", state.pos)) return false;
+      const remainingSource = state.src.slice(state.pos);
+      const match = remainingSource.match(pattern);
+      if (!match) return false;
+      const className = match[1];
+      const content = match[2];
+      if (!content.trim()) return false;
+      if (!silent) {
+        const openToken = state.push("text_class_open", "span", 1);
+        openToken.attrSet("class", className);
+        const childTokens = [];
+        state.md.inline.parse(content, state.md, state.env, childTokens);
+        state.tokens.push(...childTokens);
+        state.push("text_class_close", "span", -1);
+      }
+      state.pos += match[0].length;
+      return true;
+    }
+    md.inline.ruler.before("emphasis", "text_class", textClassRule);
+    md.renderer.rules.text_class_open = (tokens, index, options, env, self) =>
+      self.renderToken(tokens, index, options);
+    md.renderer.rules.text_class_close = (tokens, index, options, env, self) =>
+      self.renderToken(tokens, index, options);
   }
 
   // Block-level Markdown (paragraphs, headings, lists, tables, ...) for text blocks, block
