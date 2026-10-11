@@ -2633,20 +2633,20 @@
       sectionEntry.slides.push(slide);
     }
     return subjects.map(subjectEntry => {
-      if (subjectsEnabled && subjectEntry.categories.length >= 3) {
+      if (subjectsEnabled && subjectEntry.categories.length > 10) {
         return { subject: subjectEntry.subject, categories: [] };
       }
       return {
         subject: subjectEntry.subject,
         categories: subjectEntry.categories.map(categoryEntry => {
-          if (categoryEntry.sections.length >= 3) {
+          if (categoryEntry.sections.length > 10) {
             return { category: categoryEntry.category, sections: [] };
           }
           return {
             category: categoryEntry.category,
             sections: categoryEntry.sections.map(sectionEntry => ({
               section: sectionEntry.section,
-              slides: sectionEntry.slides.length > 3 ? [] : sectionEntry.slides
+              slides: sectionEntry.slides.length > 10 ? [] : sectionEntry.slides
             }))
           };
         })
