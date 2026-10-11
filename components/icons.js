@@ -56,6 +56,11 @@
       '<rect x="5.5" y="5.5" width="8" height="8" rx="1" fill="none" stroke="currentColor" stroke-width="1.3"/>' +
       '<path d="M10.5 5.5V3.75A1.25 1.25 0 0 0 9.25 2.5h-6A1.25 1.25 0 0 0 2 3.75v6A1.25 1.25 0 0 0 3.25 11H5.5" fill="none" stroke="currentColor" stroke-width="1.3"/>' +
       '</svg>',
+    hidden: '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">' +
+      '<path d="M1.5 8s2.25-4 6.5-4 6.5 4 6.5 4-2.25 4-6.5 4-6.5-4-6.5-4z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/>' +
+      '<circle cx="8" cy="8" r="1.75" fill="none" stroke="currentColor" stroke-width="1.3"/>' +
+      '<path d="M2 2l12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>' +
+      '</svg>',
     move: '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">' +
       '<path d="M2.5 5.5h7M7.5 2.5l3 3-3 3M13.5 10.5h-7M8.5 7.5l-3 3 3 3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>' +
       '</svg>',

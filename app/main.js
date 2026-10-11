@@ -726,6 +726,12 @@
     data && data.content && Array.isArray(data.content.blocks) && data.content.blocks.length
   );
 
+  // A hidden Slide remains fully available in Learner and Editor Modes. Presenter Mode alone
+  // treats it like an empty Slide so direct routes and every navigation control use the same
+  // existing skip behavior. Only the literal boolean true hides a Slide; omitted legacy fields
+  // and other falsey values remain visible.
+  const isVisibleSlide = data => hasBlocks(data) && (!presenterModeActive || data.hidden !== true);
+
   async function findVisibleTarget(target, direction = 1) {
     const pages = allPages();
     const start = pages.findIndex(page => pageKey(page) === pageKey(target));
@@ -733,7 +739,7 @@
     for (let position = start; position >= 0 && position < pages.length; position += direction) {
       const candidate = pages[position];
       const data = await loadTargetContent(candidate);
-      if (hasBlocks(data)) return candidate;
+      if (isVisibleSlide(data)) return candidate;
     }
     return null;
   }

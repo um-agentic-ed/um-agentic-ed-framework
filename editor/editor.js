@@ -500,6 +500,24 @@
     const titleField = field("Slide Title", titleInput);
     const row = document.createElement("div");
     row.className = "editor-title-row editor-field--full";
+    const hiddenButton = document.createElement("button");
+    hiddenButton.type = "button";
+    hiddenButton.className = "editor-icon-button editor-hidden-toggle";
+    hiddenButton.innerHTML = (window.umedIcons && window.umedIcons.hidden) || "Hide";
+    const syncHiddenButton = () => {
+      const hidden = data.hidden === true;
+      const action = hidden ? "Show this Slide in Presenter Mode" : "Hide this Slide in Presenter Mode";
+      hiddenButton.setAttribute("aria-pressed", String(hidden));
+      hiddenButton.setAttribute("aria-label", action);
+      hiddenButton.title = action;
+    };
+    syncHiddenButton();
+    hiddenButton.addEventListener("click", () => {
+      if (data.hidden === true) delete data.hidden;
+      else data.hidden = true;
+      syncHiddenButton();
+      scheduleRefresh();
+    });
     const copyPathButton = document.createElement("button");
     copyPathButton.type = "button";
     copyPathButton.className = "editor-icon-button";
@@ -507,7 +525,7 @@
     copyPathButton.title = "Copy path to clipboard";
     copyPathButton.setAttribute("aria-label", "Copy path to clipboard");
     copyPathButton.addEventListener("click", () => copyCurrentPath(copyPathButton));
-    row.append(titleField, copyPathButton);
+    row.append(titleField, hiddenButton, copyPathButton);
 
     const kind = movableKind();
     if (kind) {
@@ -1698,9 +1716,7 @@
     saveButton.type = "button";
     saveButton.className = "save-button";
     saveButton.textContent = "Save Changes";
-    if (info.kind === "slide") {
-      saveButton.title = "Ctrl-click (Cmd-click on Mac) to save pending changes on all Slides";
-    }
+    saveButton.title = "Ctrl-click (Cmd-click on Mac) to save pending changes on all Slides";
     saveButton.disabled = !dirtyKeys.has(info.key);
     saveButton.addEventListener("click", event => runLockedEditorAction("Save content changes", () => handleSave(info, saveButton, event.ctrlKey || event.metaKey)));
     toolbar.append(saveButton);
@@ -2049,10 +2065,10 @@
 
   async function handleSave(info, button, saveAllSlides = false) {
     if (!window.umedEditorFS) return;
-    const infos = saveAllSlides && info.kind === "slide"
+    const infos = saveAllSlides
       ? [...dirtyKeys]
         .map(key => contentInfoByKey.get(key))
-        .filter(candidate => candidate && candidate.kind === "slide")
+        .filter(candidate => candidate && (candidate.kind === "slide" || candidate.kind === "overview"))
       : [info];
     if (!infos.length) return;
 

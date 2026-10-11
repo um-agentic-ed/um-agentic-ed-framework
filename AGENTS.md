@@ -369,6 +369,10 @@ Every content Slide has the following top-level fields:
   - Uses spaced values (e.g., increments of 10) so new Slides can be inserted
     without renumbering existing Slides
 - `title`, a human-readable subject heading
+- `hidden`, an optional boolean. When `true`, Presenter Mode skips the Slide during
+  direct routing and forward/backward navigation. Learner and Editor Modes continue
+  to show it normally. An omitted field is interpreted as `false`. This field applies
+  to content Slides and every landing Slide type.
 - `contentUpdatedAt`, an ISO 8601 timestamp recording when learner-facing Slide
   content or its title last changed. It is not changed for retained Agent
   instructions, navigation-only metadata (`level` or `order`), or widget-file
@@ -378,7 +382,7 @@ Every content Slide has the following top-level fields:
 - `content`, a `blocks` array (see Slide content blocks below)
 
 App, Subject, Category, and Section landing Slides use `schemaVersion: 2` and have
-the shared `uuid`, `title`, and `content` fields above. Their hierarchy supplies their
+the shared `uuid`, `title`, optional `hidden`, and `content` fields above. Their hierarchy supplies their
 route identity, so they do not carry content-Slide-only `id`, `level`, `order`, or
 `contentUpdatedAt` fields.
 
