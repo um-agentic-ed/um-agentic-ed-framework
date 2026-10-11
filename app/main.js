@@ -853,6 +853,45 @@
     sidebarSortables = [];
   }
 
+  let sidebarCountVersion = 0;
+  let sidebarCountLabels = null;
+
+  // Editor feedback uses Presenter Mode's content rules without entering Presenter Mode. Counts
+  // cover authored content Slides only: a Section counts its direct Slides, and a Category sums
+  // its Sections. Landing Slides are navigation pages and are intentionally excluded.
+  function refreshSidebarPresenterCounts(subject, labels) {
+    const version = ++sidebarCountVersion;
+    if (!isEditorUiActive() || !subject || !labels) return;
+
+    for (const category of sorted(subject.categories)) {
+      const sectionCounts = sorted(category.sections).map(section => {
+        const count = Promise.all(sorted(section.slides).map(slide =>
+          loadTargetContent({ kind: "slide", subject, category, section, slide })
+            .then(data => hasBlocks(data) && data.hidden !== true)
+            .catch(error => {
+              console.warn(`Could not check Presenter eligibility for Slide "${slide.title}".`, error);
+              return false;
+            })
+        )).then(results => results.filter(Boolean).length);
+
+        count.then(value => {
+          const label = labels.sections.get(`${category.id}/${section.id}`);
+          if (version === sidebarCountVersion && isEditorUiActive() && label && label.isConnected) {
+            label.textContent = `${section.title} (${value})`;
+          }
+        });
+        return count;
+      });
+
+      Promise.all(sectionCounts).then(values => {
+        const label = labels.categories.get(category.id);
+        if (version === sidebarCountVersion && isEditorUiActive() && label && label.isConnected) {
+          label.textContent = `${category.title} (${values.reduce((sum, value) => sum + value, 0)})`;
+        }
+      });
+    }
+  }
+
   // Renders the sidebar as the active Subject's Category buttons, each with a collapsible list of
   // Section links. In Editor mode, wires up Sortable.js drag-and-drop reordering (Sections
   // within/across Categories, and whole Categories dragged by their button) plus spacer-based
@@ -865,6 +904,7 @@
     elements.sidebar.replaceChildren();
     const subject = activeSubject();
     if (!subject) {
+      sidebarCountLabels = null;
       const hint = document.createElement("p");
       hint.className = "sidebar-hint";
       hint.textContent = "Choose a Subject in the header menu.";
@@ -872,6 +912,8 @@
       return;
     }
     const categories = sorted(subject.categories);
+    const countLabels = { categories: new Map(), sections: new Map() };
+    sidebarCountLabels = countLabels;
 
     const leadingTarget = categories.length ? { category: categories[0], insertIndex: 0 } : null;
     if (isEditorUiActive()) elements.sidebar.append(createCategoryAdjacentSpacer(0, leadingTarget));
@@ -890,6 +932,7 @@
       const button = document.createElement("button");
       button.className = "category-button";
       button.textContent = category.title;
+      countLabels.categories.set(category.id, button);
       button.type = "button";
       button.setAttribute("aria-current", String(category.id === activeCategoryId));
       button.addEventListener("click", () => {
@@ -904,6 +947,7 @@
         link.className = "section-link";
         link.href = `#/${subject.id}/${category.id}/${section.id}`;
         link.textContent = section.title;
+        countLabels.sections.set(`${category.id}/${section.id}`, link);
         link.setAttribute("aria-current", String(category.id === activeCategoryId && section.id === activeSectionId));
 
         if (!isEditorUiActive()) {
@@ -943,6 +987,7 @@
     });
 
     if (isEditorUiActive()) attachCategoryListSortable(categoryList);
+    if (isEditorUiActive()) refreshSidebarPresenterCounts(subject, countLabels);
   }
 
   // Wires the top-level Category list as a Sortable.js group, dragged only by each Category's
@@ -2896,7 +2941,10 @@
   // through this object, only through window.umedAppContent, so main.js stays the single source of
   // truth for what is currently on screen.
   window.umedApp = {
-    refreshSlide: () => { if (currentDraw) currentDraw(); },
+    refreshSlide: () => {
+      if (currentDraw) currentDraw();
+      if (isEditorUiActive()) refreshSidebarPresenterCounts(activeSubject(), sidebarCountLabels);
+    },
     refreshNavigation: () => { renderSubjectMenu(); renderSidebar(); rebuildSearchIndex(); },
     getCurrentSlideInfo: () => currentInfo,
     getCurrentSlideUuid: () => activeNotepadKey,

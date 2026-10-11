@@ -898,6 +898,132 @@
     if (namesToAdd.length || wroteFile) scheduleRefresh();
   }
 
+  function promptNewImage() {
+    const dialog = document.createElement("dialog");
+    dialog.className = "confirm-dialog new-image-dialog";
+    const title = document.createElement("h2");
+    title.textContent = "Create a new image";
+    const form = document.createElement("form");
+    form.method = "dialog";
+    const fileName = document.createElement("input");
+    fileName.type = "text";
+    fileName.value = "new-image.jpg";
+    fileName.required = true;
+    fileName.autocomplete = "off";
+    const width = document.createElement("input");
+    width.type = "number";
+    width.value = "500";
+    width.min = "1";
+    width.max = "8192";
+    width.step = "1";
+    width.required = true;
+    const height = document.createElement("input");
+    height.type = "number";
+    height.value = "500";
+    height.min = "1";
+    height.max = "8192";
+    height.step = "1";
+    height.required = true;
+    const error = document.createElement("p");
+    error.className = "new-image-dialog-error";
+    error.setAttribute("role", "alert");
+    const actions = document.createElement("div");
+    actions.className = "confirm-dialog-actions";
+    const cancel = document.createElement("button");
+    cancel.type = "button";
+    cancel.textContent = "Cancel";
+    const create = document.createElement("button");
+    create.type = "submit";
+    create.className = "confirm-dialog-confirm";
+    create.textContent = "Create Image";
+    form.append(
+      field("Image file name", fileName),
+      field("Width (px)", width),
+      field("Height (px)", height),
+      error,
+      actions
+    );
+    actions.append(cancel, create);
+    dialog.append(title, form);
+    document.body.append(dialog);
+
+    return new Promise(resolve => {
+      let completed = false;
+      const finish = value => {
+        if (completed) return;
+        completed = true;
+        if (dialog.open) dialog.close();
+        dialog.remove();
+        resolve(value);
+      };
+      cancel.addEventListener("click", () => finish(null));
+      dialog.addEventListener("cancel", event => { event.preventDefault(); finish(null); });
+      form.addEventListener("submit", event => {
+        event.preventDefault();
+        const requestedName = fileName.value.trim();
+        const stem = requestedName.replace(/\.[^.]*$/, "");
+        const pixelWidth = Number(width.value);
+        const pixelHeight = Number(height.value);
+        if (!stem || !/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(stem)) {
+          error.textContent = "Use a file name containing only letters, numbers, periods, hyphens, or underscores.";
+          fileName.focus();
+          return;
+        }
+        if (!Number.isSafeInteger(pixelWidth) || pixelWidth < 1 || pixelWidth > 8192 ||
+            !Number.isSafeInteger(pixelHeight) || pixelHeight < 1 || pixelHeight > 8192 ||
+            pixelWidth * pixelHeight > 25000000) {
+          error.textContent = "Width and height must be whole numbers from 1 to 8192, with no more than 25 million pixels total.";
+          width.focus();
+          return;
+        }
+        finish({ fileName: `${stem}.jpg`, width: pixelWidth, height: pixelHeight });
+      });
+      dialog.showModal();
+      fileName.select();
+    });
+  }
+
+  function blankJpegBlob(width, height) {
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext("2d");
+    if (!context) return Promise.reject(new Error("This browser could not create the image canvas."));
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, width, height);
+    return new Promise((resolve, reject) => canvas.toBlob(
+      blob => blob ? resolve(blob) : reject(new Error("This browser could not create the JPEG image.")),
+      "image/jpeg",
+      0.92
+    ));
+  }
+
+  async function createNewImage(options, block, rerenderImages) {
+    if (!current || !window.umedEditorFS || !window.umedImageEditor) return;
+    const info = current;
+    const image = { source: "slide", url: options.fileName };
+    const rootHandle = await window.umedEditorFS.getContentRootHandle();
+    if (!rootHandle) return;
+    const relativePath = imageRelativePath(image);
+    if (await window.umedEditorFS.getExistingFile(rootHandle, relativePath)) {
+      alert(`An image named "${options.fileName}" already exists in this Slide folder.`);
+      return;
+    }
+    const blob = await blankJpegBlob(options.width, options.height);
+    await window.umedEditorFS.writeBinaryFile(rootHandle, relativePath, blob);
+    setBlockImages(block, [...blockImages(block), image]);
+    try {
+      await persistEditedImageReference(rootHandle, info, block, image, options.fileName);
+      rerenderImages();
+      if (window.umedApp && typeof window.umedApp.refreshSlide === "function") window.umedApp.refreshSlide();
+      await editImageFile(image, block, rerenderImages);
+    } catch (error) {
+      rerenderImages();
+      scheduleRefresh();
+      throw error;
+    }
+  }
+
   function buildImageFileFields(block, fieldset, getNewImageSource) {
     const list = document.createElement("div");
     list.className = "editor-image-files";
@@ -974,6 +1100,15 @@
     uploadButton.textContent = "Add Image";
     uploadButton.addEventListener("click", () => uploadInput.click());
 
+    const newImageButton = document.createElement("button");
+    newImageButton.type = "button";
+    newImageButton.className = "editor-add-choice";
+    newImageButton.textContent = "New Image";
+    newImageButton.addEventListener("click", async () => {
+      const options = await promptNewImage();
+      if (options) await runLockedEditorAction("Create an image", () => createNewImage(options, block, rerenderImages));
+    });
+
     uploadInput.addEventListener("change", async () => {
       const files = Array.from(uploadInput.files || []);
       uploadInput.value = ""; // allow re-selecting the same file name to fire change again
@@ -995,7 +1130,7 @@
     addUrlButton.className = "editor-add-choice";
     addUrlButton.textContent = "Add URL";
     addUrlButton.addEventListener("click", () => addRemoteImageUrl(block, rerenderImages));
-    dropZone.append(list, dropHint, uploadButton, restoreButton, addUrlButton, uploadInput);
+    dropZone.append(list, dropHint, newImageButton, uploadButton, restoreButton, addUrlButton, uploadInput);
     attachFileDropTarget(dropZone, files => runLockedEditorAction("Upload images", () => uploadImageFiles(files, block, getNewImageSource(), rerenderImages)));
 
     fieldset.append(dropZone);

@@ -1,19 +1,19 @@
 /* ==========================================================================
    Simple styling classes for use in markdown blocks.
    ========================================================================== */
-.large { font-size: 1.2rem; }
-.large-bold { font-size: 1.2rem; font-weight: 600; }
-.bold-large { font-weight: 600; font-size: 1.2rem; }
+.large { font-size: 120%; }
+.large-bold { font-size: 120%; font-weight: 600; }
+.bold-large { font-weight: 600; font-size: 120%; }
 .superscript { vertical-align: super; font-size: 0.8em; }
 .subscript { vertical-align: sub; font-size: 0.8em; }
 .superscript-bold { vertical-align: super; font-size: 0.8em; font-weight: 600; }
 .subscript-bold { vertical-align: sub; font-size: 0.8em; font-weight: 600; }
 .bold { font-weight: 600; }
 .monospace { font-family: monospace, monospace; }
-.monospace-large { font-family: monospace, monospace; font-size: 1.2rem; }
+.monospace-large { font-family: monospace, monospace; font-size: 120%; }
 .monospace-bold { font-family: monospace, monospace; font-weight: 600; }
-.monospace-large-bold { font-family: monospace, monospace; font-size: 1.2rem; font-weight: 600; }
-.monospace-bold-large { font-family: monospace, monospace; font-weight: 600; font-size: 1.2rem; }
+.monospace-large-bold { font-family: monospace, monospace; font-size: 120%; font-weight: 600; }
+.monospace-bold-large { font-family: monospace, monospace; font-weight: 600; font-size: 120%; }
 .red { color: #b3261e; }
 .orange { color: #f97316; }
 .yellow { color: #dda80a; }
@@ -26,21 +26,21 @@
 .green-bold { color: #2f855a; font-weight: 600; }
 .blue-bold { color: #005a9c; font-weight: 600; }
 .purple-bold { color: #7a3e9d; font-weight: 600; }
-.red-large { color: #b3261e; font-size: 1.2rem; }
-.orange-large { color: #f97316; font-size: 1.2rem; }
-.yellow-large { color: #dda80a; font-size: 1.2rem; }
-.green-large { color: #2f855a; font-size: 1.2rem; }
-.blue-large { color: #005a9c; font-size: 1.2rem; }
-.purple-large { color: #7a3e9d; font-size: 1.2rem; }
-.red-large-bold { color: #b3261e; font-size: 1.2rem; font-weight: 600; }
-.orange-large-bold { color: #f97316; font-size: 1.2rem; font-weight: 600; }
-.yellow-large-bold { color: #dda80a; font-size: 1.2rem; font-weight: 600; }
-.green-large-bold { color: #2f855a; font-size: 1.2rem; font-weight: 600; }
-.blue-large-bold { color: #005a9c; font-size: 1.2rem; font-weight: 600; }
-.purple-large-bold { color: #7a3e9d; font-size: 1.2rem; font-weight: 600; }
-.red-bold-large { color: #b3261e; font-weight: 600; font-size: 1.2rem; }
-.orange-bold-large { color: #f97316; font-weight: 600; font-size: 1.2rem; }
-.yellow-bold-large { color: #dda80a; font-weight: 600; font-size: 1.2rem; }
-.green-bold-large { color: #2f855a; font-weight: 600; font-size: 1.2rem; }
-.blue-bold-large { color: #005a9c; font-weight: 600; font-size: 1.2rem; }
-.purple-bold-large { color: #7a3e9d; font-weight: 600; font-size: 1.2rem; }
+.red-large { color: #b3261e; font-size: 120%; }
+.orange-large { color: #f97316; font-size: 120%; }
+.yellow-large { color: #dda80a; font-size: 120%; }
+.green-large { color: #2f855a; font-size: 120%; }
+.blue-large { color: #005a9c; font-size: 120%; }
+.purple-large { color: #7a3e9d; font-size: 120%; }
+.red-large-bold { color: #b3261e; font-size: 120%; font-weight: 600; }
+.orange-large-bold { color: #f97316; font-size: 120%; font-weight: 600; }
+.yellow-large-bold { color: #dda80a; font-size: 120%; font-weight: 600; }
+.green-large-bold { color: #2f855a; font-size: 120%; font-weight: 600; }
+.blue-large-bold { color: #005a9c; font-size: 120%; font-weight: 600; }
+.purple-large-bold { color: #7a3e9d; font-size: 120%; font-weight: 600; }
+.red-bold-large { color: #b3261e; font-weight: 600; font-size: 120%; }
+.orange-bold-large { color: #f97316; font-weight: 600; font-size: 120%; }
+.yellow-bold-large { color: #dda80a; font-weight: 600; font-size: 120%; }
+.green-bold-large { color: #2f855a; font-weight: 600; font-size: 120%; }
+.blue-bold-large { color: #005a9c; font-weight: 600; font-size: 120%; }
+.purple-bold-large { color: #7a3e9d; font-weight: 600; font-size: 120%; }

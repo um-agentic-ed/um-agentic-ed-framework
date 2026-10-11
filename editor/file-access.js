@@ -111,9 +111,9 @@
   async function pickContentRoot() {
     const explainAndProceed = window.umedComponents && window.umedComponents.confirm
       ? window.umedComponents.confirm(
-          `Editing or exporting needs one-time access to this App's project folder. In the next dialog, ` +
+          "Editing or exporting needs one-time access to this App's project folder.\n\nIn the next dialog, " +
           `browse to your local copy of this App and select its root folder (the one that contains ` +
-          `"app.js", "index.html" and "src"), then choose it. Edits are written only inside ` +
+          `"app.js" and "src").` +  "\n\n Edits are written only inside " +
           `"${CONTENT_ROOT_LABEL}"; a temporary APP_LOCK file is also created in the project root while saving.`,
           { confirmLabel: "Choose folder\u2026", cancelLabel: "Cancel" }
         )

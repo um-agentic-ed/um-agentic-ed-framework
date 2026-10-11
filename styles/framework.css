@@ -502,10 +502,24 @@ body.presenter-mode .slide-content .gpt-followups h2 { font-size: 1.1em; }
 .slide-content hr { margin: 0 0 1.25rem; }
 /* Half the between-block gap visually ties this lead-in text to the block that follows it */
 .slide-content .block-lead-markdown { margin: 0 0 .625rem; }
-.slide-content p,
-.slide-content li { font-size: 105%; }
+body:not(.presenter-mode) .slide-content p,
+body:not(.presenter-mode) .slide-content .text-block > ul > li,
+body:not(.presenter-mode) .slide-content .text-block > ol > li,
+body:not(.presenter-mode) .slide-content .block-lead-markdown > ul > li,
+body:not(.presenter-mode) .slide-content .block-lead-markdown > ol > li {
+    font-size: 105%;
+}
 body.presenter-mode .slide-content p,
-body.presenter-mode .slide-content li { font-size: 125%; }
+body.presenter-mode .slide-content .text-block > ul > li,
+body.presenter-mode .slide-content .text-block > ol > li,
+body.presenter-mode .slide-content .block-lead-markdown > ul > li,
+body.presenter-mode .slide-content .block-lead-markdown > ol > li,
+body.presenter-mode .slide-content table {
+    font-size: 130%;
+}
+body.presenter-mode .slide-content table {
+    font-size: 120%;
+}
 .data-file-upload-button {
   display: inline-flex;
   align-items: center;
@@ -944,6 +958,13 @@ body.presenter-mode .slide-content li { font-size: 125%; }
 .editor-image-file-edit svg { width: 1rem; height: 1rem; display: block; margin: auto; }
 .editor-image-file-edit:hover { color: var(--umed-brand-accent); border-color: var(--umed-brand-accent); background: #eef5fa; }
 .editor-image-file-remove:hover { color: #b3261e; background: #fbe9e9; border-color: #b3261e; }
+.new-image-dialog { width: min(26rem, calc(100vw - 2rem)); max-width: none; }
+.new-image-dialog h2 { margin: 0 0 1rem; font-size: 1.15rem; }
+.new-image-dialog form { display: grid; grid-template-columns: 1fr 1fr; gap: .8rem; }
+.new-image-dialog form .editor-field:first-child,
+.new-image-dialog-error,
+.new-image-dialog .confirm-dialog-actions { grid-column: 1 / -1; }
+.new-image-dialog-error { min-height: 1.2em; margin: 0; color: #b3261e; font-size: .9rem; }
 
 /* Destructive bitmap editor. The canvas uses image-pixel coordinates internally and CSS sizing
    only for viewport fitting, so cropping never silently reduces a large source image's resolution. */
