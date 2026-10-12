@@ -312,9 +312,10 @@
       }
     }
 
-    const [template, frameworkCss, appCss, appScript, whiteboardScript, ...runtimeScripts] = await Promise.all([
+    const [template, frameworkCss, markdownCss, appCss, appScript, whiteboardScript, ...runtimeScripts] = await Promise.all([
       readText(rootHandle, "index.html"),
       readText(rootHandle, "src/um-agentic-ed-framework/styles/framework.css"),
+      readText(rootHandle, "src/um-agentic-ed-framework/styles/markdown-styles.css"),
       readText(rootHandle, "app.css"),
       readText(rootHandle, "app.js"),
       readText(rootHandle, "src/um-agentic-ed-framework/components/presenter-whiteboard.js"),
@@ -350,7 +351,7 @@
 
     widgetDependencyStyles.forEach(link => documentCopy.head.append(link));
     const style = documentCopy.createElement("style");
-    style.textContent = `${safeInlineStyle(frameworkCss)}\n${safeInlineStyle(appCss)}`;
+    style.textContent = `${safeInlineStyle(frameworkCss)}\n${safeInlineStyle(markdownCss)}\n${safeInlineStyle(appCss)}`;
     documentCopy.head.append(style);
     documentCopy.body.append(exportedMarkdownItScript);
     widgetDependencyScripts.forEach(script => documentCopy.body.append(script));
