@@ -198,13 +198,10 @@
       });
   }
 
-  async function runLockedEditorAction(description, operation, options) {
+  async function runEditorAction(operation, options) {
     try {
       const showBusy = !options || options.showBusy !== false;
-      return await window.umedEditorFS.withProjectLock(
-        description,
-        showBusy ? () => runWithBusyFeedback(operation) : operation
-      );
+      return await (showBusy ? runWithBusyFeedback(operation) : operation());
     } catch (error) {
       console.error(error);
       alert(`The editing operation was cancelled: ${error.message}`);
@@ -381,7 +378,7 @@
         removeButton.textContent = "\u00d7";
         removeButton.title = `Remove ${fileName}`;
         removeButton.setAttribute("aria-label", `Remove trusted source ${fileName}`);
-        removeButton.addEventListener("click", () => runLockedEditorAction("Remove a trusted source", () => removeTrustedSource(fileName, block, rerenderSources)));
+        removeButton.addEventListener("click", () => runEditorAction(() => removeTrustedSource(fileName, block, rerenderSources)));
         row.append(name, removeButton);
         list.append(row);
       });
@@ -397,7 +394,7 @@
     addButton.textContent = "Add Trusted Source";
     addButton.addEventListener("click", () => uploadInput.click());
     const addFiles = async files => {
-      await runLockedEditorAction("Upload trusted sources", async () => {
+      await runEditorAction(async () => {
         for (const file of files) await uploadTrustedSource(file, block, rerenderSources);
       });
     };
@@ -416,7 +413,7 @@
     restoreButton.type = "button";
     restoreButton.className = "editor-add-choice";
     restoreButton.textContent = "Restore Source";
-    restoreButton.addEventListener("click", () => runLockedEditorAction("Restore a trusted source", () => restoreTrustedSource(block, rerenderSources)));
+    restoreButton.addEventListener("click", () => runEditorAction(() => restoreTrustedSource(block, rerenderSources)));
     dropZone.append(list, dropHint, addButton, restoreButton, uploadInput);
     attachFileDropTarget(dropZone, addFiles);
 
@@ -535,8 +532,7 @@
       moveButton.innerHTML = (window.umedIcons && window.umedIcons.move) || "Move";
       moveButton.title = `Move this ${kind}`;
       moveButton.setAttribute("aria-label", `Move this ${kind}`);
-      moveButton.addEventListener("click", () => runLockedEditorAction(
-        `Move or copy a ${kind}`,
+      moveButton.addEventListener("click", () => runEditorAction(
         () => handleMove(kind, moveButton),
         { showBusy: false }
       ));
@@ -1054,7 +1050,7 @@
         editButton.hidden = image.source !== "url" && !["jpg", "jpeg", "png", "webp"].includes(extension);
         editButton.addEventListener("click", () => {
           if (image.source === "url") editRemoteImageUrl(image, rerenderImages);
-          else runLockedEditorAction("Edit an image", () => editImageFile(image, block, rerenderImages));
+          else runEditorAction(() => editImageFile(image, block, rerenderImages));
         });
         const removeButton = document.createElement("button");
         removeButton.type = "button";
@@ -1064,7 +1060,7 @@
         removeButton.setAttribute("aria-label", `Remove image ${fileName}`);
         removeButton.addEventListener("click", () => {
           if (image.source === "url") removeRemoteImageUrl(image, block, rerenderImages);
-          else runLockedEditorAction("Remove an image", () => removeImageFile(image, block, rerenderImages));
+          else runEditorAction(() => removeImageFile(image, block, rerenderImages));
         });
         row.append(handle, name, editButton, removeButton);
         list.append(row);
@@ -1106,13 +1102,13 @@
     newImageButton.textContent = "New Image";
     newImageButton.addEventListener("click", async () => {
       const options = await promptNewImage();
-      if (options) await runLockedEditorAction("Create an image", () => createNewImage(options, block, rerenderImages));
+      if (options) await runEditorAction(() => createNewImage(options, block, rerenderImages));
     });
 
     uploadInput.addEventListener("change", async () => {
       const files = Array.from(uploadInput.files || []);
       uploadInput.value = ""; // allow re-selecting the same file name to fire change again
-      if (files.length) await runLockedEditorAction("Upload images", () => uploadImageFiles(files, block, getNewImageSource(), rerenderImages));
+      if (files.length) await runEditorAction(() => uploadImageFiles(files, block, getNewImageSource(), rerenderImages));
     });
 
     const dropZone = document.createElement("div");
@@ -1124,14 +1120,14 @@
     restoreButton.type = "button";
     restoreButton.className = "editor-add-choice";
     restoreButton.textContent = "Restore Image";
-    restoreButton.addEventListener("click", () => runLockedEditorAction("Restore an image", () => restoreImageFile(block, getNewImageSource(), rerenderImages)));
+    restoreButton.addEventListener("click", () => runEditorAction(() => restoreImageFile(block, getNewImageSource(), rerenderImages)));
     const addUrlButton = document.createElement("button");
     addUrlButton.type = "button";
     addUrlButton.className = "editor-add-choice";
     addUrlButton.textContent = "Add URL";
     addUrlButton.addEventListener("click", () => addRemoteImageUrl(block, rerenderImages));
     dropZone.append(list, dropHint, newImageButton, uploadButton, restoreButton, addUrlButton, uploadInput);
-    attachFileDropTarget(dropZone, files => runLockedEditorAction("Upload images", () => uploadImageFiles(files, block, getNewImageSource(), rerenderImages)));
+    attachFileDropTarget(dropZone, files => runEditorAction(() => uploadImageFiles(files, block, getNewImageSource(), rerenderImages)));
 
     fieldset.append(dropZone);
     rerenderImages();
@@ -1828,7 +1824,7 @@
       deleteButton.setAttribute("aria-label", "Delete is not available for this page");
       deleteButton.disabled = true;
     }
-    deleteButton.addEventListener("click", () => runLockedEditorAction(`Delete a ${deleteKind || "content item"}`, () => handleDelete(info, deleteButton, deleteKind)));
+    deleteButton.addEventListener("click", () => runEditorAction(() => handleDelete(info, deleteButton, deleteKind)));
     toolbar.append(deleteButton);
 
     const createdSnapshot = !savedSnapshots.has(info.key);
@@ -1853,7 +1849,7 @@
     saveButton.textContent = "Save Changes";
     saveButton.title = "Ctrl-click (Cmd-click on Mac) to save pending changes on all Slides";
     saveButton.disabled = !dirtyKeys.has(info.key);
-    saveButton.addEventListener("click", event => runLockedEditorAction("Save content changes", () => handleSave(info, saveButton, event.ctrlKey || event.metaKey)));
+    saveButton.addEventListener("click", event => runEditorAction(() => handleSave(info, saveButton, event.ctrlKey || event.metaKey)));
     toolbar.append(saveButton);
     currentSaveButton = saveButton;
 
@@ -2747,23 +2743,20 @@
   // Read-only-from-main.js's-perspective hook so the Slides menu's and sidebar's drag-and-drop
   // reordering and "+" add buttons can persist changes without duplicating file-serialization
   // logic.
-  const lockedMutation = (description, operation, options) => (...args) => {
+  const editorMutation = (operation, options) => (...args) => {
     const showBusy = !options || options.showBusy !== false;
-    return window.umedEditorFS.withProjectLock(
-      description,
-      showBusy ? () => runWithBusyFeedback(() => operation(...args)) : () => operation(...args)
-    );
+    return showBusy ? runWithBusyFeedback(() => operation(...args)) : operation(...args);
   };
 
   window.umedEditor = {
-    persistSlideOrder: lockedMutation("Reorder Slides", persistSlideOrder),
-    createSlide: lockedMutation("Create a Slide", createSlide),
-    persistIndex: lockedMutation("Reorder content", persistIndex),
-    createSubject: lockedMutation("Create a Subject", createSubject),
-    createCategory: lockedMutation("Create a Category", createCategory),
-    createSection: lockedMutation("Create a Section", createSection),
-    moveSection: lockedMutation("Move a Section", moveSection),
-    splitSection: lockedMutation("Split a Section", splitSection, { showBusy: false })
+    persistSlideOrder: editorMutation(persistSlideOrder),
+    createSlide: editorMutation(createSlide),
+    persistIndex: editorMutation(persistIndex),
+    createSubject: editorMutation(createSubject),
+    createCategory: editorMutation(createCategory),
+    createSection: editorMutation(createSection),
+    moveSection: editorMutation(moveSection),
+    splitSection: editorMutation(splitSection, { showBusy: false })
   };
 
   if (window.umedApp && typeof window.umedApp.getCurrentSlideInfo === "function") {

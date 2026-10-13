@@ -194,6 +194,7 @@
   let currentDraw = null;
   let currentInfo = null;
   let editorModeActive = false;
+  let editorModeTransitioning = false;
   let presenterModeActive = false;
   let presenterFontPercent = 100;
   let notepadOpen = false;
@@ -2911,7 +2912,7 @@
   // Editor mode is otherwise not secured (see AGENTS.md), so it is still gated to file:// URLs.
   const titleLink = document.querySelector(".app-title");
   if (titleLink) {
-    titleLink.addEventListener("click", event => {
+    titleLink.addEventListener("click", async event => {
       if (window.umedSingleFileExport) {
         if (event.ctrlKey || event.metaKey) event.preventDefault();
         return;
@@ -2919,21 +2920,40 @@
       if (!event.ctrlKey && !event.metaKey) return;
       event.preventDefault();
       if (location.protocol !== "file:") return;
+      if (editorModeTransitioning) return;
+      editorModeTransitioning = true;
       if (editorModeActive) {
-        editorModeActive = false;
-        resolveRoute();
+        try {
+          if (window.umedEditorFS && typeof window.umedEditorFS.endEditorSession === "function") {
+            await window.umedEditorFS.endEditorSession();
+          }
+        } catch (error) {
+          console.error(error);
+          alert(`Editor Mode lock release failed: ${error.message}`);
+        } finally {
+          editorModeActive = false;
+          editorModeTransitioning = false;
+          resolveRoute();
+        }
         return;
       }
-      // The Editor scripts must exist before the Editor UI is built, so they load first.
-      loadEditorScripts()
-        .then(() => {
-          editorModeActive = true;
-          resolveRoute();
-        })
-        .catch(error => {
-          console.error(error);
-          alert(`Editor Mode could not be loaded: ${error.message}`);
-        });
+      // Load the Editor services, then acquire folder access, the session-long Web Lock, and
+      // APP_LOCK.js before exposing any mutation-capable Editor UI.
+      try {
+        await loadEditorScripts();
+        if (!window.umedEditorFS || typeof window.umedEditorFS.beginEditorSession !== "function") {
+          throw new Error("The Editor Mode file-access service is unavailable.");
+        }
+        const entered = await window.umedEditorFS.beginEditorSession();
+        if (!entered) return;
+        editorModeActive = true;
+        resolveRoute();
+      } catch (error) {
+        console.error(error);
+        alert(`Editor Mode could not be entered: ${error.message}`);
+      } finally {
+        editorModeTransitioning = false;
+      }
     });
   }
 

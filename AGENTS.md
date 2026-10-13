@@ -174,6 +174,9 @@ the App's identity or branding:
     when a Learner asks about a Slide, since developers prefer different chatbots.
     The prompt, with the Slide text, is copied to the clipboard for pasting there.
     If blank or invalid, prompts are still copied but no chatbot is opened or linked.
+  - `allowedEditorNames`: An array of recognized Editor names. Only these names 
+    are accepted as valid entries to enable Editor Mode and can be recorded in 
+    the `owner` field of  the `APP_LOCK.js` file.
 - `app.css` sets CSS custom properties on `:root` that override Framework
   defaults: `--umed-brand-bg`, `--umed-brand-text`, `--umed-brand-hover-bg`,
   `--umed-brand-border` and `--umed-brand-accent`. Use valid CSS colors with
@@ -305,39 +308,64 @@ are stored in `content-index.js`.
   a proposed change would break compatibility with existing Apps, identify the
   impact and obtain explicit authorization for that break before proceeding.
 
-## Agent project lock
+## Agent and Editor project lock
 
-Use `APP_LOCK` in the Parent root to prevent overlapping Agent and Editor Mode
+Use `APP_LOCK.js` in the Parent root to prevent overlapping Agent and Editor Mode
 project updates. The lock is cooperative and is not a security boundary.
 
-Before creating, writing, moving, renaming, or deleting any project file, an
-Agent must atomically acquire `APP_LOCK`. Creating, validating, and removing the
-lock itself are the only exceptions. Read-only planning and evaluation do not
-require the lock.
+For every Agent brief, evaluate whether the task is expected to create, write, 
+move, rename, or delete any project file. If it might, an Agent must atomically 
+acquire `APP_LOCK.js` before doing any work. Creating, validating, and removing 
+the lock itself are the only exceptions. Read-only planning and evaluation tasks 
+do not require the lock.
 
-`APP_LOCK` must contain:
+`APP_LOCK.js` must be a valid Javascript file as follows so the running app can 
+also read it as a script:
 
-- A newly generated, unguessable owner token.
-- The acquisition time as an ISO 8601 timestamp.
-- A short description of the operation.
+```js
+window.umedAppLock = {
+  // The app lock mode, either `agent` or `editor`. Agents must use `agent`.
+  // App Editor Mode must use `editor`.
+  mode: "<mode>",
 
-- Acquire the lock with an operating-system-level atomic create-if-absent
-  operation, never a separate existence check followed by creation or overwrite.
-- Acquire it after receiving authorization and collecting user choices, and
-  immediately before the first project mutation.
-- If acquisition reports that `APP_LOCK` exists, make no project changes and
-  tell the user another editing operation may be active. Never treat an existing
-  lock as stale or remove it without explicit user authorization.
+  // The app lock owner. Agents must use `AGENT`. App Editor Mode sets the owner 
+  // name from user inputs, which must match an entry in 
+  // `window.umedAppIdentity.allowedEditorNames` from `app.js`.
+  owner: "<owner>",
+
+  // A newly generated, unguessable owner token.
+  token: "<token>",
+
+  // The acquisition time as an ISO 8601 timestamp.
+  timestamp: "<timestamp>",
+
+  // A short description of the Agent task. An empty string for app Editor Mode.
+  description: "<description>"
+};
+```
+
+The actual file must contain only `window.umedAppLock = <JSON object>;`, with no 
+executable statements beyond that assignment. The comments in this example are 
+explanatory and need not appear in the file.
+
+- Agents must acquire the lock with an operating-system-level atomic 
+  create-if-absent operation.
+- Acquire it after receiving authorization before doing further work on planning,
+  execution, and projection mutation.
+- If acquisition reports that `APP_LOCK.js` exists, do no further work and tell 
+  the user another editing operation may be active. An Agent may never treat an 
+  existing lock as stale or remove it without explicit user authorization
+  (although an Editor might within the running app).
 - Keep the owner token for the entire logical operation. One lock must cover all
-  related edits, generated assets, formatting, corrective changes,
-  mutation-capable verification, rollback, and cleanup.
-- Verify that `APP_LOCK` still contains the Agent's token before each destructive
+  related edits, generated assets, formatting, corrective changes, mutation-capable 
+  verification, rollback, and cleanup.
+- Verify that `APP_LOCK.js` still contains the Agent's token before each destructive
   phase and before release. If ownership is lost, stop changing files, perform
   only cleanup that cannot affect the other owner, leave its lock in place, and
   report the condition.
 - Whether the operation succeeds or fails, attempt final release only after
-  rereading `APP_LOCK` and confirming the token still matches. Never remove a
-  lock owned by another operation.
+  rereading `APP_LOCK.js` and confirming the token still matches. An Agent may 
+  never remove a lock owned by another operation.
 
 # Slide content file format
 

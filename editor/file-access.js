@@ -1,16 +1,18 @@
 (function () {
   "use strict";
 
-  // Shared File System Access API helper for Editor Mode saves. Editors choose the root folder of
-  // their App's Parent repository once per session (on first save). That choice is verified and
-  // narrowed to its src/content folder, which every other Editor path is relative to, so the
-  // Editor can only write inside the App's content.
+  // Shared File System Access API and project-lock service for Editor Mode. Editors choose the
+  // Parent root before entering Editor Mode. The selected folder, its exclusive Web Lock, and its
+  // APP_LOCK.js ownership are retained for the complete Editor Mode session.
   const CONTENT_ROOT_LABEL = window.umedContentRoot;
   let rootHandlePromise = null;
   let appRootHandle = null;
   let mutationQueue = Promise.resolve();
   let activeProjectLock = null;
-  const PROJECT_LOCK_FILE = "APP_LOCK";
+  let releaseWebLock = null;
+  let webLockRequest = null;
+  let sessionStartPromise = null;
+  const PROJECT_LOCK_FILE = "APP_LOCK.js";
 
   // Chrome can reject a File System Access operation when a synced placeholder file (Dropbox
   // Smart Sync, OneDrive Files On-Demand, etc.) changes state between resolving its handle and
@@ -88,7 +90,7 @@
   // those writes and invalidate one another's browser-side filesystem state.
   function enqueueMutation(operation) {
     const guardedOperation = async () => {
-      if (!activeProjectLock) throw new Error("A project mutation was attempted without owning APP_LOCK.");
+      if (!activeProjectLock) throw new Error("A project mutation was attempted outside an active Editor Mode session.");
       await validateProjectLock(activeProjectLock);
       return operation();
     };
@@ -113,8 +115,8 @@
       ? window.umedComponents.confirm(
           "Editing or exporting needs one-time access to this App's project folder.\n\nIn the next dialog, " +
           `browse to your local copy of this App and select its root folder (the one that contains ` +
-          `"app.js" and "src").` +  "\n\n Edits are written only inside " +
-          `"${CONTENT_ROOT_LABEL}"; a temporary APP_LOCK file is also created in the project root while saving.`,
+          `"app.js" and "src").` + "\n\nEdits are written only inside " +
+          `"${CONTENT_ROOT_LABEL}". APP_LOCK.js is created in the project root and retained while Editor Mode is active.`,
           { confirmLabel: "Choose folder\u2026", cancelLabel: "Cancel" }
         )
       : Promise.resolve(true);
@@ -142,21 +144,19 @@
       return pickAgain ? pickContentRoot() : null;
     }
 
-    // The root app.js declares the App's immutable appUuid, so a folder whose app.js lacks this
-    // App's UUID is probably a different App; confirm before writing into it.
+    // The root app.js declares the App's immutable appUuid. Refuse a different or malformed App
+    // root rather than allowing Editor Mode to write into a folder selected by mistake.
     const appUuid = window.umedAppIdentity && window.umedAppIdentity.appUuid;
-    if (appUuid) {
-      const rootAppScript = await readRootFileText(rootFolderHandle, "app.js");
-      if (rootAppScript === null || !rootAppScript.includes(appUuid)) {
-        const useAnyway = window.umedComponents && window.umedComponents.confirm
-          ? await window.umedComponents.confirm(
-              `The "app.js" in "${rootFolderHandle.name}" does not declare this App's appUuid, so this may be a ` +
-              `different App. Use it anyway?`,
-              { confirmLabel: "Use this folder", cancelLabel: "Pick again" }
-            )
-          : true;
-        if (!useAnyway) return pickContentRoot();
-      }
+    const rootAppScript = await readRootFileText(rootFolderHandle, "app.js");
+    if (!appUuid || rootAppScript === null || !rootAppScript.includes(appUuid)) {
+      const pickAgain = window.umedComponents && window.umedComponents.confirm
+        ? await window.umedComponents.confirm(
+            `The "app.js" in "${rootFolderHandle.name}" does not declare this App's appUuid. ` +
+            `Select the root folder of this App instead.`,
+            { confirmLabel: "Pick again", cancelLabel: "Cancel" }
+          )
+        : false;
+      return pickAgain ? pickContentRoot() : null;
     }
     appRootHandle = rootFolderHandle;
     return contentHandle;
@@ -183,10 +183,6 @@
   }
 
   async function readProjectLockOnce() {
-    // APP_LOCK is normally absent. Check only once so every Editor action does not inherit the
-    // probe retry backoff (about 1.4 seconds) before it can begin. To restore the former
-    // cloud-sync-aware behavior, replace the direct read below with:
-    // return readProjectLock();
     try {
       const fileHandle = await appRootHandle.getFileHandle(PROJECT_LOCK_FILE);
       return await (await fileHandle.getFile()).text();
@@ -198,71 +194,187 @@
 
   function parseProjectLock(text) {
     if (!text) return null;
-    try { return JSON.parse(text); } catch (_error) { return { unreadable: true }; }
+    const match = text.match(/^\s*window\.umedAppLock\s*=\s*([\s\S]*?)\s*;\s*$/);
+    if (!match) return { unreadable: true };
+    try {
+      const lock = JSON.parse(match[1]);
+      if (!lock || typeof lock !== "object"
+          || !["agent", "editor"].includes(lock.mode)
+          || typeof lock.owner !== "string" || !lock.owner.trim()
+          || typeof lock.token !== "string" || !lock.token.trim()
+          || typeof lock.timestamp !== "string" || !lock.timestamp.trim()
+          || typeof lock.description !== "string") return { unreadable: true };
+      return lock;
+    } catch (_error) {
+      return { unreadable: true };
+    }
   }
 
   async function validateProjectLock(lock) {
     const stored = parseProjectLock(await readProjectLock());
-    if (!stored || stored.ownerToken !== lock.ownerToken) {
+    if (!stored || stored.unreadable || stored.mode !== lock.mode
+        || stored.owner !== lock.owner || stored.token !== lock.token) {
       throw new Error("Project lock ownership was lost. No further project changes were made.");
     }
+    return stored;
   }
 
-  function lockDescription(stored) {
-    if (!stored || stored.unreadable) return "The existing APP_LOCK could not be read.";
-    const details = [stored.operation, stored.acquiredAt].filter(Boolean).join(" — ");
-    return details ? `Existing lock: ${details}` : "The project already contains APP_LOCK.";
+  function newSessionToken() {
+    return window.crypto && typeof window.crypto.randomUUID === "function"
+      ? window.crypto.randomUUID()
+      : Array.from(window.crypto.getRandomValues(new Uint8Array(16)), value => value.toString(16).padStart(2, "0")).join("");
   }
 
-  async function runWithProjectFileLock(description, operation) {
-    const existingText = await readProjectLockOnce();
-    if (existingText !== null) {
-      throw new Error(`Another editing operation may be active. ${lockDescription(parseProjectLock(existingText))}`);
-    }
+  function serializeProjectLock(lock) {
+    return `window.umedAppLock = ${JSON.stringify(lock, null, 2)};\n`;
+  }
 
-    const lock = {
-      ownerToken: window.crypto && typeof window.crypto.randomUUID === "function"
-        ? window.crypto.randomUUID()
-        : Array.from(window.crypto.getRandomValues(new Uint8Array(16)), value => value.toString(16).padStart(2, "0")).join(""),
-      acquiredAt: new Date().toISOString(),
-      operation: description
-    };
+  async function writeProjectLock(lock) {
     const fileHandle = await appRootHandle.getFileHandle(PROJECT_LOCK_FILE, { create: true });
     const writable = await fileHandle.createWritable();
-    await writable.write(JSON.stringify(lock));
+    await writable.write(serializeProjectLock(lock));
     await writable.close();
-    await validateProjectLock(lock);
+  }
 
+  function storageKeys(appUuid) {
+    return {
+      editorName: `umed:${appUuid}:editorName`,
+      sessionToken: `umed:${appUuid}:sessionToken`
+    };
+  }
+
+  async function acquireEditorProjectLock() {
+    const identity = window.umedAppIdentity || {};
+    const allowedNames = identity.allowedEditorNames;
+    if (!Array.isArray(allowedNames)) {
+      throw new Error("This App does not declare allowedEditorNames, so Editor Mode is disabled.");
+    }
+    const keys = storageKeys(identity.appUuid);
+    let editorName = (sessionStorage.getItem(keys.editorName) || "").trim();
+    if (!allowedNames.includes(editorName)) {
+      editorName = window.umedComponents && window.umedComponents.promptText
+        ? await window.umedComponents.promptText("Enter your recognized Editor name to enable Editor Mode.", {
+            confirmLabel: "Continue"
+          })
+        : (window.prompt("Enter your recognized Editor name to enable Editor Mode.") || "").trim();
+      if (!editorName) return null;
+      if (!allowedNames.includes(editorName)) {
+        throw new Error("That name is not recognized for this App. Ask a project administrator to update allowedEditorNames if you need Editor access.");
+      }
+      sessionStorage.setItem(keys.editorName, editorName);
+    }
+
+    const storedToken = (sessionStorage.getItem(keys.sessionToken) || "").trim();
+    const existingText = await readProjectLockOnce();
+    let lock;
+    if (existingText !== null) {
+      const existing = parseProjectLock(existingText);
+      if (!existing || existing.unreadable) {
+        throw new Error("The existing APP_LOCK.js is malformed or could not be read.");
+      }
+      if (existing.mode !== "editor" || existing.owner !== editorName) {
+        throw new Error(`Another editing session may be active. Lock mode: ${existing.mode}; owner: ${existing.owner}; timestamp: ${existing.timestamp}.`);
+      }
+      if (storedToken && existing.token === storedToken) {
+        lock = existing;
+      } else {
+        const resume = window.umedComponents && window.umedComponents.confirm
+          ? await window.umedComponents.confirm(
+              `An Editor lock owned by "${editorName}" was created at ${existing.timestamp}. ` +
+              "Continue that previous Editor session?",
+              { confirmLabel: "Continue session", cancelLabel: "Cancel" }
+            )
+          : window.confirm(`Continue the previous Editor session owned by "${editorName}"?`);
+        if (!resume) return null;
+        lock = { ...existing, token: newSessionToken(), timestamp: new Date().toISOString() };
+        await writeProjectLock(lock);
+        sessionStorage.setItem(keys.sessionToken, lock.token);
+        await validateProjectLock(lock);
+      }
+    } else {
+      lock = {
+        mode: "editor",
+        owner: editorName,
+        token: newSessionToken(),
+        timestamp: new Date().toISOString(),
+        description: ""
+      };
+      await writeProjectLock(lock);
+      sessionStorage.setItem(keys.sessionToken, lock.token);
+      await validateProjectLock(lock);
+    }
     activeProjectLock = lock;
+    return lock;
+  }
+
+  async function beginEditorSession() {
+    if (activeProjectLock) return true;
+    if (sessionStartPromise) return sessionStartPromise;
+    sessionStartPromise = (async () => {
+      const contentHandle = await getContentRootHandle();
+      if (!contentHandle) return false;
+      if (!(navigator.locks && typeof navigator.locks.request === "function")) {
+        throw new Error("This browser cannot coordinate Editor Mode project locks between tabs.");
+      }
+      const appUuid = window.umedAppIdentity && window.umedAppIdentity.appUuid;
+      return new Promise((resolve, reject) => {
+        webLockRequest = navigator.locks.request(
+          `umed-project-${appUuid}`,
+          { mode: "exclusive", ifAvailable: true },
+          async webLock => {
+            if (!webLock) {
+              reject(new Error("Another Editor Mode session is active in this browser."));
+              return;
+            }
+            try {
+              const lock = await acquireEditorProjectLock();
+              if (!lock) {
+                resolve(false);
+                return;
+              }
+              resolve(true);
+              await new Promise(release => { releaseWebLock = release; });
+            } catch (error) {
+              reject(error);
+            } finally {
+              releaseWebLock = null;
+            }
+          }
+        );
+        webLockRequest.catch(reject);
+      });
+    })();
     try {
-      return await operation();
+      return await sessionStartPromise;
     } finally {
+      sessionStartPromise = null;
+    }
+  }
+
+  async function endEditorSession() {
+    if (sessionStartPromise) await sessionStartPromise.catch(() => {});
+    const lock = activeProjectLock;
+    let releaseError = null;
+    if (lock) {
+      await mutationQueue;
       try {
         await validateProjectLock(lock);
         await appRootHandle.removeEntry(PROJECT_LOCK_FILE);
+        const remaining = await readProjectLockOnce();
+        if (remaining !== null) throw new Error("APP_LOCK.js still exists after its removal was requested.");
+        const keys = storageKeys(window.umedAppIdentity.appUuid);
+        sessionStorage.removeItem(keys.sessionToken);
       } catch (error) {
-        console.error(error);
-        alert(`Could not safely release the project lock: ${error.message}`);
-      } finally {
-        activeProjectLock = null;
+        releaseError = error;
       }
     }
-  }
-
-  async function withProjectLock(description, operation) {
-    const contentHandle = await getContentRootHandle();
-    if (!contentHandle) return undefined;
-    if (!(navigator.locks && typeof navigator.locks.request === "function")) {
-      throw new Error("This browser cannot coordinate Editor Mode project locks between tabs, so the operation was cancelled.");
+    activeProjectLock = null;
+    if (releaseWebLock) releaseWebLock();
+    if (webLockRequest) await webLockRequest.catch(() => {});
+    webLockRequest = null;
+    if (releaseError) {
+      throw new Error(`Could not safely release APP_LOCK.js. Its session token was retained for recovery. ${releaseError.message}`);
     }
-
-    const appUuid = window.umedAppIdentity && window.umedAppIdentity.appUuid || "unknown-app";
-    return navigator.locks.request(`umed-project-${appUuid}`, { mode: "exclusive", ifAvailable: true }, async webLock => {
-      if (!webLock) {
-        throw new Error("Another Editor Mode operation is active, so this operation was cancelled.");
-      }
-      return runWithProjectFileLock(description, operation);
-    });
   }
 
   // Generic write shared by text (slide.js/content-index.js serialization) and binary (uploaded
@@ -545,12 +657,14 @@
   }
 
   window.umedEditorFS = {
+    beginEditorSession,
+    endEditorSession,
+    hasEditorSession: () => Boolean(activeProjectLock),
     getContentRootHandle,
     getAppRootHandle: async () => {
       const contentHandle = await getContentRootHandle();
       return contentHandle ? appRootHandle : null;
     },
-    withProjectLock,
     writeTextFile: (...args) => enqueueMutation(() => writeFile(...args)),
     writeBinaryFile: (...args) => enqueueMutation(() => writeFile(...args)),
     readFile,
