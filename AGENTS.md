@@ -200,7 +200,7 @@ the App's identity or branding:
   - The Slide for a URL with no hashed route, an empty hash `#`, or the root
     hash `#/` is read from `/src/content/app-overview.js`. This landing Slide also
     lists links to all Subjects when Subjects are enabled.
-- An invalid route displays the error Slide in `/src/content/routing-error.js`.
+- An invalid route displays the Framework's built-in, non-editable error view.
 - In Learner and Presenter Modes, a Slide whose `content.blocks` array is empty is
   skipped rather than rendered. Empty landing and content Slides remain present
   and directly accessible in Editor Mode so Editors can restore their content or
@@ -268,7 +268,6 @@ repository that wraps this instance of the `um-agentic-ed-framework` repository.
 /src/content/
   app-overview.js          Top-level Slide shown on app start
   content-index.js         Master file with metadata for all Subjects, Categories, Sections and Slides
-  routing-error.js         Slide shown for a malformed route
   assets/                  Images and other files used by multiple Slides
     images/                Image asset files
   <subject>/               Folder for a first-level Subject in the header popup
@@ -378,11 +377,11 @@ explanatory and need not appear in the file.
 - Landing Slides (`subject.js`, `category.js`, `section.js`) assign their Slide
   object to the key made from their folder path, i.e.,
   `window.umedAppContent['<subject>']`, `window.umedAppContent['<subject>/<category>']`
-  and `window.umedAppContent['<subject>/<category>/<section>']`. The App landing and
-  error Slides use the keys `app-overview` and `routing-error`.
+  and `window.umedAppContent['<subject>/<category>/<section>']`. The App landing
+  Slide uses the key `app-overview`.
 - App, Subject, Category, and Section landing Slides have immutable UUIDs so Learner
-  notes remain associated with them when hierarchy routes change. The routing-error
-  Slide is not a note-taking target and does not require a UUID.
+  notes remain associated with them when hierarchy routes change. The Framework's
+  built-in error view is not a content Slide or a note-taking target.
 
 ## Slide fields
 
@@ -592,7 +591,7 @@ window.umedAppContentIndex = {
 - The index does **not** duplicate full Slide `content`; only fields needed
   for navigation, routing, and search are present.
 - Subject ids become top-level folders in `src/content` and content keys, so
-  `assets`, `app-overview` and `routing-error` are reserved and must not
+  `assets` and `app-overview` are reserved and must not
   be used as Subject ids.
 - A Subject-suppressed App has exactly one Subject entry. Its `id` and `title`
   both equal `app-subject`, its matching `subject.js` landing Slide has no

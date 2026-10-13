@@ -1788,10 +1788,10 @@
   }
 
   function buildForm(info) {
-    const data = window.umedAppContent[info.key];
-    if (!data) return;
     pane.replaceChildren();
     pane.scrollTop = 0;
+    const data = window.umedAppContent[info.key];
+    if (!data) return;
 
     const toolbar = document.createElement("div");
     toolbar.className = "editor-toolbar";
@@ -1817,7 +1817,7 @@
     } else if (deleteKind === "slide") {
       deleteButton.textContent = "Delete Slide";
     } else {
-      // The App landing and error Slides can never be deleted; dashes mark the button as
+      // The App landing Slide can never be deleted; dashes mark the button as
       // intentionally inert while keeping the toolbar layout stable.
       deleteButton.textContent = "-----";
       deleteButton.title = "This page cannot be deleted";
@@ -2736,7 +2736,7 @@
 
   window.addEventListener("umed:slide-loaded", event => {
     current = event.detail;
-    contentInfoByKey.set(current.key, current);
+    if (current.key) contentInfoByKey.set(current.key, current);
     refreshIfActive();
   });
 

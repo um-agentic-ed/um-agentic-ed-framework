@@ -1509,7 +1509,7 @@
 
   // Subject folders sit directly under src/content, so their ids (and content keys) must not clash
   // with the folder and keys reserved for App-level content.
-  const RESERVED_SUBJECT_IDS = ["assets", "app-overview", "routing-error"];
+  const RESERVED_SUBJECT_IDS = ["assets", "app-overview"];
 
   async function handleAddSubject(insertIndex) {
     const title = window.umedComponents && window.umedComponents.promptText
@@ -1577,7 +1577,26 @@
   }
 
   function renderError() {
-    renderOverview("routing-error", `${CONTENT_ROOT}/routing-error.js`, CONTENT_ROOT);
+    setChromeVisible(false);
+    destroySlideMenuSortables();
+    elements.menu.replaceChildren();
+    updateHeaderNavigation(null);
+
+    const draw = () => {
+      if (window.umedWidgetHost) window.umedWidgetHost.destroyAll();
+      clearDataFileSubscriptions();
+      elements.slide.replaceChildren();
+      elements.slide.scrollTop = 0;
+      slidePromptContent = null;
+      const heading = document.createElement("h1");
+      heading.textContent = "Page Not Found";
+      const message = document.createElement("p");
+      message.textContent = "The page you requested could not be found. Use the sidebar or search box above to find the content you're looking for.";
+      elements.slide.append(heading, message);
+    };
+    currentDraw = draw;
+    draw();
+    notifySlideLoaded(null, "system", null, null);
   }
 
   function renderNoContent() {

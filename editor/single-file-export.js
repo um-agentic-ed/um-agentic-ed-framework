@@ -26,10 +26,7 @@
   }
 
   function contentPaths(index) {
-    const paths = [
-      ["app-overview", "src/content/app-overview.js"],
-      ["routing-error", "src/content/routing-error.js"]
-    ];
+    const paths = [["app-overview", "src/content/app-overview.js"]];
     for (const subject of index.subjects || []) {
       paths.push([subject.id, `src/content/${subject.id}/subject.js`]);
       for (const category of subject.categories || []) {
@@ -283,13 +280,7 @@
     let hasWidgets = false;
 
     for (const [key, path] of contentPaths(index)) {
-      let scriptText;
-      try {
-        scriptText = await readText(rootHandle, path);
-      } catch (error) {
-        if (key === "routing-error") continue;
-        throw error;
-      }
+      const scriptText = await readText(rootHandle, path);
       const data = readRegisteredContent(scriptText, key);
       content[key] = data;
       for (const block of data.content.blocks) {
