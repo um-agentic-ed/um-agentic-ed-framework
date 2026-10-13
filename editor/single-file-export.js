@@ -303,8 +303,7 @@
       }
     }
 
-    const [template, frameworkCss, markdownCss, appCss, appScript, whiteboardScript, ...runtimeScripts] = await Promise.all([
-      readText(rootHandle, "index.html"),
+    const [frameworkCss, markdownCss, appCss, appScript, whiteboardScript, ...runtimeScripts] = await Promise.all([
       readText(rootHandle, "src/um-agentic-ed-framework/styles/framework.css"),
       readText(rootHandle, "src/um-agentic-ed-framework/styles/markdown-styles.css"),
       readText(rootHandle, "app.css"),
@@ -313,8 +312,14 @@
       ...BUNDLED_SCRIPTS.map(path => readText(rootHandle, path))
     ]);
 
+    if (typeof window.umedFrameworkShellHtml !== "string" || !window.umedFrameworkShellHtml.trim()) {
+      throw new Error("The Framework app shell is unavailable.");
+    }
+    const template = `<!doctype html><html lang="en"><head><meta charset="utf-8">` +
+      `<meta name="viewport" content="width=device-width, initial-scale=1"><title></title></head>` +
+      `<body>${window.umedFrameworkShellHtml}</body></html>`;
     const documentCopy = new DOMParser().parseFromString(template, "text/html");
-    const markdownItScript = Array.from(documentCopy.querySelectorAll("script[src]"))
+    const markdownItScript = Array.from(document.querySelectorAll("script[src]"))
       .find(script => /(?:^|\/)markdown-it(?:\.min)?\.js(?:[?#]|$)/i.test(script.getAttribute("src") || ""));
     if (!markdownItScript) {
       throw new Error("The app template does not include the required markdown-it script.");
@@ -324,7 +329,7 @@
     // library parser-blocking, so window.markdownit exists before main.js initializes rendering.
     exportedMarkdownItScript.removeAttribute("defer");
     const widgetDependencyScripts = hasWidgets
-      ? Array.from(documentCopy.querySelectorAll("script[src]"))
+      ? Array.from(document.querySelectorAll("script[src]"))
         .filter(script => isWidgetDependency(script.getAttribute("src")))
         .map(script => {
           const copy = script.cloneNode(false);
@@ -333,7 +338,7 @@
         })
       : [];
     const widgetDependencyStyles = hasWidgets
-      ? Array.from(documentCopy.querySelectorAll("link[rel='stylesheet'][href]"))
+      ? Array.from(document.querySelectorAll("link[rel='stylesheet'][href]"))
         .filter(link => isWidgetDependency(link.getAttribute("href")))
         .map(link => link.cloneNode(false))
       : [];

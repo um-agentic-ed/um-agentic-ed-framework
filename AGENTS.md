@@ -250,7 +250,7 @@ repository that wraps this instance of the `um-agentic-ed-framework` repository.
   .github/skills/    Agent skills (one folder each, with a SKILL.md) for common repeated tasks
   app.css            App-specific branding colors as CSS custom properties.
   app.js             Top-level App identity declared as window.umedAppIdentity.
-  <app-target>.html  App HTML entrypoint, renamed as required by the App from index.html
+  <app-target>.html  Stable App launcher that loads the Framework bootstrap; it may be renamed
   src/               Generated app code and structured educational content
 ```
 
@@ -290,6 +290,18 @@ the authoritative instructions for app structure.
 
 Section titles and other Section-level metadata not tied to individual Slides 
 are stored in `content-index.js`.
+
+## App launch contract
+
+The Parent HTML entrypoint remains the App's canonical URL but contains no App
+shell, shared styles, dependency list, or content-loading sequence. It loads only
+`src/um-agentic-ed-framework/app/bootstrap.js`. The Framework bootstrap owns those
+definitions, loads Parent `app.js`, `app.css`, and `src/content/content-index.js`
+relative to the Parent root, and then starts `app/main.js`. Renaming the Parent
+entrypoint must not affect these paths or runtime behavior.
+
+The single-file exporter builds from the Framework-owned shell rather than from
+the Parent entrypoint, so exports remain independent of the launcher's filename.
 
 # Editing permissions and locks
 
