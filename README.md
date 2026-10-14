@@ -13,11 +13,11 @@ This repository, `um-agentic-ed-framework`, is a git submodule that defines the
 structure and assembly of `um-agentic-ed` apps whose content is defined by 
 descendent copies of the
 [um-agentic-ed-parent](https://github.com/um-agentic-ed/um-agentic-ed-parent)
-repository.
+template repository.
 
 `um-agentic-ed-framework` is loaded by app developers when they create a new app 
-following instructions in the parent repository and its derivative templates. 
-This framework repository is never used on its own.
+following instructions in the parent repository. This framework repository is 
+never used on its own.
 
 ## AI notice
 
