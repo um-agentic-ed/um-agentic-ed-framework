@@ -25,6 +25,20 @@ system design or codebase as needed to update app metadata or content you should
 stop and notify the user. This file does not itself provide authorization to
 make changes to the `um-agentic-ed` system structure or Framework codebase.
 
+## Agent skills
+
+Task-specific Agent skills use a tiered strategy where the Parent app maintains
+generic entrypoints `build-app`, `migrate-app`, and `develop-system` in root
+folder `.github/skills`, for Editors to edit app content and update it to a new
+Framework version and for Developers to edit the Framework. Parent
+`.github/skills/<entrypoint>/SKILL.md` files invoke named tasks in
+`src/um-agentic-ed-framework/agent-skills/<entrypoint|task-name>.md` that
+provide task details consistent with current Framework schema versions and
+contracts. Usage syntaxes are `/build-app <task-name> [arguments]`,
+`/develop-system <brief>`, and `/migrate-app`. The Framework `agent-skills`
+folder must maintain a file `manifest.json` of supported skills that can be used
+to support task `/build-app list` to help Editors know what tasks are available.
+
 # App usage modes
 
 The app has three page states:
@@ -489,12 +503,10 @@ type-specific fields:
   shown only in Editor mode, and never rendered in Learner Mode.
   - On an individual Slide, it directs generation or revision of that Slide's
     learner-facing content. Editors save the Slide, then run
-    [`fill-or-update-slide`](../../.github/skills/fill-or-update-slide/SKILL.md) with
-    the Slide path.
+    `/build-app fill-or-update-slide <slide-path>`.
   - On a Section landing Slide, it directs generation or revision of multiple
     child Slides across that Section. Editors save the Section, then run
-    [`fill-or-update-section`](../../.github/skills/fill-or-update-section/SKILL.md)
-    with the Section path.
+    `/build-app fill-or-update-section <section-path>`.
   - The Agent uses all retained instructions blocks in order and leaves them
     unchanged unless explicitly asked to remove them.
 - `trustedSources` block: a Section-landing-only block stored in `section.js`, with
@@ -798,6 +810,11 @@ When generating content for a Section, you should:
   - A widget that depends on a data file should use `onChange` in its
     `init(container)` to (re)draw whenever the file becomes available, rather
     than assuming it is already loaded.
+
+# App version migration
+
+In the future this section will include App version migration instructions when
+breaking changes occur in the Framework.
 
 # Security requirements
 - Never place protected health information (PHI), credentials, copyrighted 

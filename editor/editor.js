@@ -1208,8 +1208,8 @@
         ? current.key
         : sectionInstructions ? "<subject>/<category>/<section>" : "<subject>/<category>/<section>/<slide>";
       promptCode.textContent = sectionInstructions
-        ? `/fill-or-update-section ${targetKey}`
-        : `/fill-or-update-slide ${targetKey}`;
+        ? `/build-app fill-or-update-section ${targetKey}`
+        : `/build-app fill-or-update-slide ${targetKey}`;
 
       const copyButton = document.createElement("button");
       copyButton.type = "button";
@@ -1300,7 +1300,7 @@
       promptCode.className = "editor-widget-prompt";
       const updatePrompt = () => {
         const slideKey = current ? current.key : "<subject>/<category>/<section>/<slide>";
-        promptCode.textContent = `/create-or-update-widget ${slideKey} ${block.name || "<widget-name>"}`;
+        promptCode.textContent = `/build-app create-or-update-widget ${slideKey} ${block.name || "<widget-name>"}`;
       };
 
       const row = document.createElement("div");

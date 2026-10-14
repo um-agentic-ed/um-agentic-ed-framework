@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "buildAppTasks": [
+    {
+      "name": "create-or-update-widget",
+      "description": "Create or update a Slide widget from its saved widget-block instructions.",
+      "argumentHint": "<subject>/<category>/<section>/<slide> [widget-name]",
+      "file": "create-or-update-widget.md"
+    },
+    {
+      "name": "fill-or-update-section",
+      "description": "Generate or update multiple Slides from a Section's saved instructions.",
+      "argumentHint": "<subject>/<category>/<section>",
+      "file": "fill-or-update-section.md"
+    },
+    {
+      "name": "fill-or-update-slide",
+      "description": "Generate or update one Slide from its saved instructions.",
+      "argumentHint": "<subject>/<category>/<section>/<slide>",
+      "file": "fill-or-update-slide.md"
+    },
+    {
+      "name": "import-powerpoint",
+      "description": "Faithfully convert a PowerPoint presentation into App Slides.",
+      "argumentHint": "<subject>/<category>/<section>",
+      "file": "import-powerpoint.md"
+    },
+    {
+      "name": "index-slides",
+      "description": "Validate and synchronize the content manifest, ordering, and search keywords.",
+      "argumentHint": "",
+      "file": "index-slides.md"
+    },
+    {
+      "name": "set-app-identity",
+      "description": "Set App identity, Subject usage, Editor names, and branding.",
+      "argumentHint": "[requested identity or branding changes]",
+      "file": "set-app-identity.md"
+    }
+  ]
+}
+
