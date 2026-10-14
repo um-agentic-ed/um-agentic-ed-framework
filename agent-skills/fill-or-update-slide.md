@@ -41,7 +41,7 @@ exists.
    images, and approved widget/data-file contracts.
 4. **Preserve authoring state and navigation metadata.** Leave every
    `instructions` block exactly as saved, including its relative order and content. Do
-   not change the Slide's `id`, `uuid`, `schemaVersion`, `level`, `order`, or `title`.
+   not change the Slide's `id`, `uuid`, `slideSchemaVersion`, `level`, `order`, or `title`.
    Instructions blocks are not rendered in Learner Mode.
 5. **Maintain search metadata.** If learner-facing content was added, replaced,
    or revised, set `contentUpdatedAt` in the Slide object in `slide.js` to the

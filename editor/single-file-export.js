@@ -9,6 +9,7 @@
   const MAX_EXPORT_IMAGE_WIDTH = 2200;
   const EXPORT_JPEG_QUALITY = 0.9;
   const BUNDLED_SCRIPTS = [
+    "src/um-agentic-ed-framework/app/schema-contract.js",
     "src/um-agentic-ed-framework/components/icons.js",
     "src/um-agentic-ed-framework/components/data-files.js",
     "src/um-agentic-ed-framework/components/modal.js",
@@ -274,6 +275,11 @@
 
   async function buildHtml(rootHandle, selection) {
     const index = exportSelectionIndex(window.umedAppContentIndex, selection);
+    const schemaContract = window.umedSchemaContract;
+    const indexValidation = schemaContract && schemaContract.validateIndex(index);
+    if (!indexValidation || !indexValidation.valid) {
+      throw new Error(schemaContract ? schemaContract.diagnostic(indexValidation) : "The Framework schema contract is unavailable.");
+    }
     const content = {};
     const assets = {};
     const widgetScripts = new Map();
@@ -282,6 +288,12 @@
     for (const [key, path] of contentPaths(index)) {
       const scriptText = await readText(rootHandle, path);
       const data = readRegisteredContent(scriptText, key);
+      const validation = schemaContract.validateSlide(data, {
+        kind: path.endsWith("/slide.js") ? "slide" : "overview",
+        key,
+        path
+      });
+      if (!validation.valid) throw new Error(schemaContract.diagnostic(validation));
       content[key] = data;
       for (const block of data.content.blocks) {
         if (block.type === "image") {

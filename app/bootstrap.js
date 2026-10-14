@@ -225,6 +225,7 @@
     "https://cdn.jsdelivr.net/npm/tabulator-tables@6.5.3/dist/js/tabulator.min.js",
     "https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js",
     "https://cdn.jsdelivr.net/npm/markdown-it@14.1.0/dist/markdown-it.min.js",
+    new URL("app/schema-contract.js", frameworkRoot).href,
     new URL("app.js", appRoot).href,
     new URL("src/content/content-index.js", appRoot).href,
     new URL("components/icons.js", frameworkRoot).href,

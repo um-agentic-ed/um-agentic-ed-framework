@@ -4,6 +4,8 @@
   const DATABASE_NAME = "umed-learner-notes";
   const DATABASE_VERSION = 2;
   const STORE_NAME = "notes";
+  const schemaContract = window.umedSchemaContract;
+  if (!schemaContract) throw new Error("The Framework schema contract is unavailable; learner notes cannot start.");
   let databasePromise = null;
   let warningShown = false;
 
@@ -66,6 +68,14 @@
       }
       request.onsuccess = () => {
         const record = request.result;
+        if (record) {
+          const validation = schemaContract.validateNoteRecord(record, { path: `IndexedDB note ${appUuid}/${slideUuid}` });
+          if (!validation.valid) {
+            console.warn("An incompatible learner-note record was ignored.", schemaContract.diagnostic(validation));
+            resolve(null);
+            return;
+          }
+        }
         resolve(record ? {
           text: typeof record.text === "string" ? record.text : "",
           drawing: record.drawing && typeof record.drawing === "object" ? record.drawing : null,
@@ -105,7 +115,7 @@
           text,
           drawing: hasDrawing ? drawing : null,
           updatedAt: new Date().toISOString(),
-          schemaVersion: 2
+          notesSchemaVersion: schemaContract.notes.current
         });
       }
       transaction.oncomplete = () => resolve(true);
@@ -134,7 +144,15 @@
         resolve([]);
         return;
       }
-      request.onsuccess = () => resolve(request.result || []);
+      request.onsuccess = () => {
+        const records = request.result || [];
+        resolve(records.filter(record => {
+          const validation = schemaContract.validateNoteRecord(record, { path: `IndexedDB note ${record.appUuid}/${record.slideUuid}` });
+          if (validation.valid) return true;
+          console.warn("An incompatible learner-note record was ignored.", schemaContract.diagnostic(validation));
+          return false;
+        }));
+      };
       request.onerror = () => {
         warn(request.error);
         resolve([]);
@@ -174,7 +192,7 @@
           updatedAt: note.updatedAt || new Date().toISOString(),
           slideTitle: note.slideTitle || null,
           routeAtExport: note.routeAtExport || null,
-          schemaVersion: 2
+          notesSchemaVersion: schemaContract.notes.current
         }));
       };
       cursorRequest.onerror = () => transaction.abort();

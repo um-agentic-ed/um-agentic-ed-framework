@@ -54,14 +54,15 @@ brief.
    existing Slide unless the saved Section instructions explicitly require its
    removal; if deletion intent is ambiguous, ask first.
 5. **Preserve identity and assign metadata.** Keep every retained Slide's
-   existing `id`, UUID, and `schemaVersion`. Reordering or changing a Slide's
+   existing `id`, UUID, and `slideSchemaVersion`. Reordering or changing a Slide's
    title does not change its UUID or imply an id/path rename. If the saved brief
    explicitly requires an id/path rename, preserve the UUID and coordinate the
    folder, registration key, index entry, and any Slide-local asset or widget
    references. Give each genuinely new Slide a unique kebab-case id (following
    the repository AGENTS.md's 20-character title-to-id rule: drop common words,
    keep adding whole words only while under budget, hard-truncate a single
-   too-long word), a newly generated canonical UUID v4, and `schemaVersion: 2`.
+   too-long word), a newly generated canonical UUID v4, and the current
+   `slideSchemaVersion` declared in Framework `app/schema-contract.js`.
    Assign valid Levels and
    spaced `order` values that produce the intended progression across the whole
    Section, and build every new Slide as the complete Slide object required by

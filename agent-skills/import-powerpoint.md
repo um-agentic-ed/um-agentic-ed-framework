@@ -135,7 +135,7 @@ before proceeding. Also read the target Section's own
     question-like slide text as a plain `text` block; further question
     authoring is left to later edits outside this skill.
 11. **Preserve identity and assign metadata.** Keep every retained Slide's
-    existing `id`, UUID, and `schemaVersion` unchanged. For each new Slide:
+    existing `id`, UUID, and `slideSchemaVersion` unchanged. For each new Slide:
     use the title-placeholder text as its title; if that text is absent or
     empty, use the deterministic fallback `PowerPoint slide <N>`. Assign a
     kebab-case `id` derived from that title using the repository
@@ -146,14 +146,15 @@ before proceeding. Also read the target Section's own
     limit applies to the complete id including this `NN-` prefix, so budget the
     title-derived portion to `20 - length("NN-")` characters (17 for a two-digit
     prefix); generate a new
-    canonical UUID v4; set `schemaVersion: 2`; set `order` to the prior
+    canonical UUID v4; set `slideSchemaVersion` to the current version declared
+    in Framework `app/schema-contract.js`; set `order` to the prior
     existing Slide's highest `order` plus successive increments of 10,
     without renumbering any existing Slide; and set `level` to the same
     Level as the Section's last existing Slide (or `foundations` if the
     Section has none), applying one Level to the whole converted batch unless
     a retained instruction explicitly directs specific Level breaks. Build the
     complete Slide object required by the Framework schema, including `id`,
-    `uuid`, `schemaVersion`, `contentUpdatedAt`, `title`, `level`, `order`, and
+    `uuid`, `slideSchemaVersion`, `contentUpdatedAt`, `title`, `level`, `order`, and
     `content.blocks`; do not rely on its folder, registration key, or index
     entry to substitute for a missing field. Do not modify the Section landing
     Slide's title, content, or retained instructions.

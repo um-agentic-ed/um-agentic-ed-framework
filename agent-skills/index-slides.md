@@ -29,10 +29,11 @@ follow the Framework's Content Index, Slide metadata, and keyword rules.
    Section, malformed JavaScript, invalid Level identifiers, missing overview
    files, a Slide file without a manifest entry, a manifest entry without a
    Slide file, a Subject id that is reserved (`assets`, `app-overview`),
-   a missing/malformed/duplicate Slide UUID, any mismatch of a
-   Slide's id/uuid/title/level/order, a missing/malformed `appUuid` in the root `app.js`, an
-   index `appOverviewUuid` mismatch, an index schema version that does not match
-   the Framework schema, a missing/malformed/duplicate App/Subject/Category/Section
+   a missing/malformed/duplicate Slide UUID, a `slideSchemaVersion` that does not
+   match the current version declared in Framework `app/schema-contract.js`, any
+   mismatch of a Slide's id/uuid/title/level/order, a missing/malformed `appUuid` in the root `app.js`, an
+   index `appOverviewUuid` mismatch, an `indexSchemaVersion` that does not match
+   the same Framework contract, a missing/malformed/duplicate App/Subject/Category/Section
    landing UUID or a landing UUID mismatch with the index, a UUID duplicated
    anywhere across landing and content Slides, an
    overview title mismatch with the manifest, or any Subject/Category/Section/Slide id

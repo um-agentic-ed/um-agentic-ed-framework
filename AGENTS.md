@@ -38,6 +38,8 @@ contracts. Usage syntaxes are `/build-app <task-name> [arguments]`,
 `/develop-system <brief>`, and `/migrate-app`. The Framework `agent-skills`
 folder must maintain a file `manifest.json` of supported skills that can be used
 to support task `/build-app list` to help Editors know what tasks are available.
+The manifest carries `skillManifestSchemaVersion`, which must equal the current
+skill-manifest version declared in `app/schema-contract.js`.
 
 # App usage modes
 
@@ -310,9 +312,10 @@ are stored in `content-index.js`.
 The Parent HTML entrypoint remains the App's canonical URL but contains no App
 shell, shared styles, dependency list, or content-loading sequence. It loads only
 `src/um-agentic-ed-framework/app/bootstrap.js`. The Framework bootstrap owns those
-definitions, loads Parent `app.js`, `app.css`, and `src/content/content-index.js`
-relative to the Parent root, and then starts `app/main.js`. Renaming the Parent
-entrypoint must not affect these paths or runtime behavior.
+definitions, loads `app/schema-contract.js` followed by Parent `app.js`, `app.css`,
+and `src/content/content-index.js` relative to the Parent root, and then starts
+`app/main.js`. Renaming the Parent entrypoint must not affect these paths or
+runtime behavior.
 
 The single-file exporter builds from the Framework-owned shell rather than from
 the Parent entrypoint, so exports remain independent of the launcher's filename.
@@ -409,6 +412,30 @@ explanatory and need not appear in the file.
   notes remain associated with them when hierarchy routes change. The Framework's
   built-in error view is not a content Slide or a note-taking target.
 
+## Schema compatibility contract
+
+The Framework keeps independent content-index, Slide, learner-notes, and
+agent-skill-manifest schema version histories because any document shape can
+change without requiring the others to change. The machine-readable contract in
+`app/schema-contract.js` exposes each document type's `current`, `readable`, and
+`writable` versions plus its structural validator. At present, only each current
+version is readable and writable; no implicit normalization or migration occurs.
+An incompatible index prevents App startup, an incompatible lazily loaded Slide
+displays a diagnostic instead of being rendered, Editor Mode refuses to write
+incompatible content documents, an incompatible learner-notes file is rejected
+on import, and an incompatible skill manifest must not be used to dispatch an
+Agent task.
+
+Index validation is one linear pass at startup over metadata the App already
+uses for navigation and search. Slide validation occurs only when a Slide is
+loaded. These checks enforce the versioned document's required container,
+identity, hierarchy/navigation, and Block-envelope fields; content-quality and
+keyword-generation rules remain authoring and indexing responsibilities.
+
+Exported `<appName>.notes.json` files and learner-note records stored in IndexedDB
+use `notesSchemaVersion`. The Framework validates the exported file envelope and
+note entries before applying the existing same-App and drawing-security checks.
+
 ## Slide fields
 
 Every content Slide has the following top-level fields:
@@ -418,7 +445,10 @@ Every content Slide has the following top-level fields:
   is preserved when the Slide is edited, renamed, reordered, or moved, and is
   duplicated in the matching `content-index.js` Slide entry. A copied Slide is
   a new Slide and receives a new UUID.
-- `schemaVersion`, an integer identifying the shape of this Slide object; UUID-bearing Slides use version `2`
+- `slideSchemaVersion`, the integer identifying the shape of this Slide object.
+  Its value must equal `window.umedSchemaContract.slide.current`, declared by
+  the installed Framework in `app/schema-contract.js`; Agents must read that
+  declaration rather than copying a version literal from examples or older Apps.
 - `level`, the Level of the Slide (`foundations`, `core-learning`, or `advanced-topics`)
 - `order`, the rank order of a Slide within its Section
   - Increases across all Section Levels (Levels are not separately numbered)
@@ -437,7 +467,8 @@ Every content Slide has the following top-level fields:
   content or title change.
 - `content`, a `blocks` array (see Slide content blocks below)
 
-App, Subject, Category, and Section landing Slides use `schemaVersion: 2` and have
+App, Subject, Category, and Section landing Slides use the current
+`slideSchemaVersion` and have
 the shared `uuid`, `title`, optional `hidden`, and `content` fields above. Their hierarchy supplies their
 route identity, so they do not carry content-Slide-only `id`, `level`, `order`, or
 `contentUpdatedAt` fields.
@@ -554,7 +585,7 @@ search content without loading every `slide.js` file, preserving load efficiency
 
 ```js
 window.umedAppContentIndex = {
-  schemaVersion: 3,
+  indexSchemaVersion: CURRENT_INDEX_SCHEMA_VERSION,
   appOverviewUuid: 'f784d68c-b840-4890-a45d-7f7e663c9f4f',
   subjects: [
     {
@@ -593,6 +624,15 @@ window.umedAppContentIndex = {
   ]
 };
 ```
+
+`CURRENT_INDEX_SCHEMA_VERSION` above is an explanatory placeholder, not an
+identifier saved in the App. In `content-index.js`, `indexSchemaVersion` is the
+integer declared by the installed Framework contract. The installed Framework's
+`app/schema-contract.js` is the single authority for current, readable, and
+writable versions of all Framework-governed schemas.
+The runtime validates the complete index once at startup and validates each Slide
+only when that Slide is loaded. Editor Mode validates again before writing either
+document type and refuses to overwrite an incompatible document.
 
 - `appOverviewUuid` is the immutable UUID stored in `app-overview.js`.
 - `subjects[].uuid`, `categories[].uuid`, and `sections[].uuid` mirror the immutable

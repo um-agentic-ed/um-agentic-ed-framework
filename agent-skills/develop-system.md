@@ -79,8 +79,10 @@ unless the brief also changes the shared contract that governs them.
   `app/bootstrap.js`. Keep the app shell and all dependency ordering in the
   Framework bootstrap so a submodule update cannot require replicated HTML edits.
 - The bootstrap loads `framework.css` before exposing the UI, applies `app.css`
-  after Framework styles, and loads `app.js` and `content-index.js` before
-  `main.js`.
+  after Framework styles, and loads `app/schema-contract.js`, `app.js`, and
+  `content-index.js` before `main.js`. `app/schema-contract.js` is the single
+  authority for accepted index, Slide, learner-notes, and agent-skill-manifest
+  schema versions and their lightweight structural validators.
   Features used only occasionally are loaded on first use:
   - Activating Editor Mode loads `editor/file-access.js` and `editor/editor.js`.
   - Entering Presenter Mode or opening the Learner sketchpad loads Fabric.js and
@@ -268,4 +270,7 @@ browser-specific protocol for entering and exiting Editor Mode:
 - Export both modalities to the unencrypted `<appName>.notes.json` format. A
   valid same-App import may atomically replace saved notes or be viewed as
   temporary read-only shared notes without altering the Learner's notes.
+- Exported notes files and IndexedDB note records use the current
+  `notesSchemaVersion` declared by `app/schema-contract.js`; imports validate the
+  notes file contract before performing same-App and drawing-security checks.
 

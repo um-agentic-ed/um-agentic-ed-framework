@@ -3,6 +3,8 @@
 
   const pane = document.getElementById("editor-pane");
   if (!pane) return;
+  const schemaContract = window.umedSchemaContract;
+  if (!schemaContract) throw new Error("The Framework schema contract is unavailable; Editor Mode cannot start.");
 
   // Closes any open "+ Add block" menu when clicking elsewhere, since <details> only
   // toggles on its own <summary> and won't auto-close on an outside click.
@@ -1924,6 +1926,8 @@
     for (const block of (data.content && data.content.blocks) || []) {
       if ((block.type === "widget" || block.type === "dataFile") && block.name) block.name = toKebabCase(block.name);
     }
+    const validation = schemaContract.validateSlide(data, { kind: info.kind, key: info.key, path: info.src || info.key });
+    schemaContract.assertWritable(validation);
     const assignment = `window.umedAppContent[${JSON.stringify(info.key)}] = ${JSON.stringify(data, null, 2)};\n`;
     return info.kind === "slide" ? `window.umedAppContent = window.umedAppContent || {};\n${assignment}` : assignment;
   }
@@ -1933,11 +1937,19 @@
   // sync after a Slides menu drag-and-drop reorder without disturbing any unsaved edits already
   // held in memory for a Slide that is currently loaded.
   function loadSlideContent(key, src) {
-    if (window.umedAppContent[key]) return Promise.resolve(window.umedAppContent[key]);
+    const validatedContent = () => {
+      const data = window.umedAppContent[key];
+      const validation = schemaContract.validateSlide(data, { kind: "slide", key, path: src });
+      schemaContract.assertWritable(validation);
+      return data;
+    };
+    if (window.umedAppContent[key]) return Promise.resolve(validatedContent());
     return new Promise((resolve, reject) => {
       const script = document.createElement("script");
       script.src = src;
-      script.onload = () => resolve(window.umedAppContent[key]);
+      script.onload = () => {
+        try { resolve(validatedContent()); } catch (error) { reject(error); }
+      };
       script.onerror = () => reject(new Error(`Could not load ${src}`));
       document.head.append(script);
     });
@@ -1961,6 +1973,7 @@
   }
 
   async function writeIndexFile(rootHandle) {
+    schemaContract.assertWritable(schemaContract.validateIndex(window.umedAppContentIndex));
     const indexContent = `window.umedAppContentIndex = ${JSON.stringify(window.umedAppContentIndex, null, 2)};\n`;
     await window.umedEditorFS.writeTextFile(rootHandle, "content-index.js", indexContent);
   }

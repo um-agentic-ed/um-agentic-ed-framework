@@ -1,6 +1,7 @@
 (function () {
   "use strict";
 
+  const schemaContract = window.umedSchemaContract;
   const index = window.umedAppContentIndex;
   const identity = window.umedAppIdentity || {};
   // The one place the content folder path is declared; the Editor and widget host read it too.
@@ -154,11 +155,28 @@
   const chatbotLink = elements.gptToastLink && elements.gptToastLink.querySelector("a");
   if (chatbotLink && chatbotUrl) chatbotLink.href = chatbotUrl;
   if (elements.gptToastLink) elements.gptToastLink.hidden = !chatbotUrl;
-  if (!index || !Array.isArray(index.subjects)) {
+
+  function showFatalContentError(message) {
     elements.education.hidden = false;
     elements.toolbar.hidden = true;
     elements.menu.hidden = true;
-    elements.slide.textContent = "The content index could not be loaded.";
+    elements.slide.replaceChildren();
+    const heading = document.createElement("h1");
+    heading.textContent = "The app content is incompatible";
+    const detail = document.createElement("p");
+    detail.textContent = message;
+    elements.slide.append(heading, detail);
+  }
+
+  if (!schemaContract || typeof schemaContract.validateIndex !== "function") {
+    showFatalContentError("The Framework schema contract could not be loaded.");
+    return;
+  }
+  const indexValidation = schemaContract.validateIndex(index);
+  if (!indexValidation.valid) {
+    const diagnostic = schemaContract.diagnostic(indexValidation);
+    console.error(diagnostic);
+    showFatalContentError(`${diagnostic} Update the Framework or use a compatible App version.`);
     return;
   }
 
@@ -214,8 +232,6 @@
   const contentLoadPromises = new Map();
   let sidebarCollapsed = false;
   const UMED_GPT_WINDOW_NAME = "umed-chatbot";
-  const NOTES_FILE_FORMAT = "umed-learner-notes";
-  const NOTES_FILE_SCHEMA_VERSION = 2;
   const MAX_NOTES_FILE_BYTES = 10 * 1024 * 1024;
   const UMED_GPT_TAB_OPENED_KEY = "umed-gpt-tab-opened";
   const UMED_GPT_TOAST_SUPPRESSED_KEY = "umed-gpt-toast-suppressed";
@@ -465,8 +481,8 @@
     }).sort((a, b) => (a.routeAtExport || a.slideUuid).localeCompare(b.routeAtExport || b.slideUuid));
 
     const payload = {
-      format: NOTES_FILE_FORMAT,
-      schemaVersion: NOTES_FILE_SCHEMA_VERSION,
+      format: schemaContract.notes.format,
+      notesSchemaVersion: schemaContract.notes.current,
       app: { uuid: identity.appUuid, name: identity.appName },
       exportedAt: new Date().toISOString(),
       notes
@@ -482,14 +498,11 @@
   }
 
   function validateNotesFile(payload) {
-    if (!payload || typeof payload !== "object" || Array.isArray(payload)) throw new Error("The selected file is not a notes object.");
-    if (payload.format !== NOTES_FILE_FORMAT || payload.schemaVersion !== NOTES_FILE_SCHEMA_VERSION) {
-      throw new Error("The selected file is not a supported learner-notes file.");
-    }
+    const schemaValidation = schemaContract.validateNotesFile(payload);
+    if (!schemaValidation.valid) throw new Error(schemaContract.diagnostic(schemaValidation));
     if (!payload.app || payload.app.uuid !== identity.appUuid) {
       throw new Error("These notes belong to a different educational app and cannot be loaded here.");
     }
-    if (!Array.isArray(payload.notes)) throw new Error("The notes file does not contain a valid notes list.");
 
     const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
     const drawingTypes = new Set(["line", "rect", "ellipse", "triangle", "group", "i-text", "path"]);
@@ -1221,7 +1234,7 @@
     expandedCategoryId = category.id;
     renderSidebar();
 
-    const initialData = { uuid, schemaVersion: 2, title, content: { blocks: [{ type: "text", markdown: "" }] } };
+    const initialData = { uuid, slideSchemaVersion: schemaContract.slide.current, title, content: { blocks: [{ type: "text", markdown: "" }] } };
     if (window.umedEditor && typeof window.umedEditor.createSection === "function") {
       try {
         await window.umedEditor.createSection(subject.id, category.id, id, initialData);
@@ -1263,7 +1276,7 @@
     expandedCategoryId = id;
     renderSidebar();
 
-    const initialData = { uuid, schemaVersion: 2, title, content: { blocks: [{ type: "text", markdown: "" }] } };
+    const initialData = { uuid, slideSchemaVersion: schemaContract.slide.current, title, content: { blocks: [{ type: "text", markdown: "" }] } };
     if (window.umedEditor && typeof window.umedEditor.createCategory === "function") {
       try {
         await window.umedEditor.createCategory(subject.id, id, initialData);
@@ -1537,7 +1550,7 @@
     }
     renderSubjectMenu();
 
-    const initialData = { uuid, schemaVersion: 2, title, content: { blocks: [{ type: "text", markdown: "" }] } };
+    const initialData = { uuid, slideSchemaVersion: schemaContract.slide.current, title, content: { blocks: [{ type: "text", markdown: "" }] } };
     if (window.umedEditor && typeof window.umedEditor.createSubject === "function") {
       try {
         await window.umedEditor.createSubject(id, initialData);
@@ -1657,6 +1670,20 @@
     if (!visible) setNotepadOpen(false);
   }
 
+  function validateLoadedSlide(key, kind, src) {
+    const result = schemaContract.validateSlide(contentStore[key], { kind, key, path: src });
+    if (result.valid) return true;
+    const diagnostic = schemaContract.diagnostic(result);
+    console.error(diagnostic);
+    elements.slide.replaceChildren();
+    const heading = document.createElement("h1");
+    heading.textContent = "This Slide is incompatible";
+    const detail = document.createElement("p");
+    detail.textContent = `${diagnostic} Update the Framework or use a compatible App version.`;
+    elements.slide.append(heading, detail);
+    return false;
+  }
+
   // Renders a top-level overview or error Slide. Valid App, Subject, and Category overviews keep
   // the toolbar visible for stable page layout. Their Section-specific controls remain disabled,
   // while an already-open Slides menu remains present in its empty, Level-only state.
@@ -1680,8 +1707,9 @@
       const data = contentStore[key];
       if (!data) {
         elements.slide.textContent = "Content could not be loaded.";
-        return;
+        return false;
       }
+      if (!validateLoadedSlide(key, "overview", src)) return false;
       const heading = document.createElement("h1");
       heading.textContent = data.title;
       elements.slide.append(heading);
@@ -1690,17 +1718,17 @@
       }
       if (navigationTarget && navigationTarget.kind === "app") renderSubjectList(elements.slide);
       if (navigationTarget) renderBottomNavigation(navigationTarget, elements.slide);
+      return true;
     };
     currentDraw = draw;
 
     if (contentStore[key]) {
-      draw();
-      notifySlideLoaded(key, "overview", assetBasePath, src);
+      if (draw()) notifySlideLoaded(key, "overview", assetBasePath, src);
       return;
     }
     const script = document.createElement("script");
     script.src = cacheBustedLocalSrc(src);
-    script.onload = () => { draw(); notifySlideLoaded(key, "overview", assetBasePath, src); };
+    script.onload = () => { if (draw()) notifySlideLoaded(key, "overview", assetBasePath, src); };
     script.onerror = () => { elements.slide.textContent = "Content could not be loaded."; };
     document.head.append(script);
   }
@@ -1727,8 +1755,9 @@
       const data = contentStore[key];
       if (!data) {
         elements.slide.textContent = "Slide content could not be loaded.";
-        return;
+        return false;
       }
+      if (!validateLoadedSlide(key, isOverview ? "overview" : "slide", src)) return false;
       const promptContent = document.createElement("div");
       promptContent.className = "slide-prompt-content";
       const heading = document.createElement("h1");
@@ -1743,18 +1772,18 @@
       renderGptFollowups(data.content.blocks || [], elements.slide);
       if (isOverview) renderTrustedSources(data.content.blocks || [], elements.slide, key);
       renderBottomNavigation(target, elements.slide);
+      return true;
     };
     currentDraw = draw;
     const assetBasePath = `${CONTENT_ROOT}/${key}`;
 
     if (contentStore[key]) {
-      draw();
-      notifySlideLoaded(key, isOverview ? "overview" : "slide", assetBasePath, src);
+      if (draw()) notifySlideLoaded(key, isOverview ? "overview" : "slide", assetBasePath, src);
       return;
     }
     const script = document.createElement("script");
     script.src = cacheBustedLocalSrc(src);
-    script.onload = () => { draw(); notifySlideLoaded(key, isOverview ? "overview" : "slide", assetBasePath, src); };
+    script.onload = () => { if (draw()) notifySlideLoaded(key, isOverview ? "overview" : "slide", assetBasePath, src); };
     script.onerror = () => { elements.slide.textContent = "Slide content could not be loaded."; };
     document.head.append(script);
   }
@@ -2244,7 +2273,7 @@
       rerankSiblings(siblings);
     }
 
-    const initialData = { uuid, schemaVersion: 2, title, content: { blocks: [{ type: "text", markdown: "" }] } };
+    const initialData = { uuid, slideSchemaVersion: schemaContract.slide.current, title, content: { blocks: [{ type: "text", markdown: "" }] } };
     try {
       const warning = await window.umedEditor.splitSection(
         subject.id, category.id, section.id, id, initialData,
@@ -2297,7 +2326,8 @@
       alert(error.message);
       return;
     }
-    const newEntry = { id, uuid, title, level, order: 0, keywords: [] };
+    const contentUpdatedAt = new Date().toISOString();
+    const newEntry = { id, uuid, title, level, order: 0, keywords: [], keywordsUpdatedAt: contentUpdatedAt };
 
     target.section.slides.push(newEntry);
     const changed = insertSlideAtPosition(target.section, newEntry, level, insertAtInLevel);
@@ -2306,10 +2336,11 @@
     const initialData = {
       id,
       uuid,
-      schemaVersion: 2,
+      slideSchemaVersion: schemaContract.slide.current,
       level: newEntry.level,
       order: newEntry.order,
       title,
+      contentUpdatedAt,
       content: { blocks: [{ type: "text", markdown: "" }] }
     };
     const otherChanged = changed.filter(item => item !== newEntry);

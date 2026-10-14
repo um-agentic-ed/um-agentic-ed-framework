@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "skillManifestSchemaVersion": 1,
   "buildAppTasks": [
     {
       "name": "create-or-update-widget",
