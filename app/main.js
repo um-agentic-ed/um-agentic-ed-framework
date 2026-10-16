@@ -276,8 +276,8 @@
 
   // The Subject/Category/Section belonging to the route currently on screen, so renderSidebar()
   // can mark the matching Category button/Section link with aria-current for persistent
-  // highlighting. The sidebar always lists the Categories of the active Subject; the active
-  // Subject is sticky, so it is kept on the App landing and error routes once one was chosen.
+  // highlighting. The sidebar always lists the Categories of the selected Subject. The App
+  // landing selects the first ordered Subject, while error routes keep the previous selection.
   let activeSubjectId = defaultSubject ? defaultSubject.id : null;
   let activeCategoryId = null;
   let activeSectionId = null;
@@ -1317,7 +1317,8 @@
       return;
     }
     if (!parts.length) {
-      setActiveRoute(null, null, null);
+      const firstSubject = sorted(index.subjects)[0] || null;
+      setActiveRoute(firstSubject ? firstSubject.id : null, null, null);
       const target = { kind: "app" };
       if (!await renderVisibleTargetOrAdvance(target, version)) return;
       renderOverview("app-overview", `${CONTENT_ROOT}/app-overview.js`, CONTENT_ROOT, target);
@@ -1413,10 +1414,9 @@
   }
 
   // Syncs the header Subject menu and the sidebar's highlighted Category/Section with the route
-  // just resolved, expanding the active Category (if any) so its Section stays visible, and
-  // re-renders so this works for every navigation path (Prev/Next, Slide menu, search results,
-  // back/forward), not just direct sidebar clicks. A null `subjectId` (App landing or error
-  // route) keeps the previously active Subject so the sidebar does not go blank.
+  // just resolved. Category-or-deeper routes expand the active Category; App and Subject landing
+  // routes expand the selected Subject's first Category without marking it active. A null
+  // `subjectId` (used by error routes) keeps the previously selected Subject and expansion.
   function setActiveRoute(subjectId, categoryId, sectionId) {
     if (subjectId && subjectId !== activeSubjectId) {
       activeSubjectId = subjectId;
@@ -1424,7 +1424,13 @@
     }
     activeCategoryId = categoryId;
     activeSectionId = sectionId;
-    if (categoryId) expandedCategoryId = categoryId;
+    if (categoryId) {
+      expandedCategoryId = categoryId;
+    } else if (subjectId) {
+      const subject = activeSubject();
+      const firstCategory = subject ? sorted(subject.categories)[0] : null;
+      expandedCategoryId = firstCategory ? firstCategory.id : null;
+    }
     renderSubjectMenu();
     renderSidebar();
   }

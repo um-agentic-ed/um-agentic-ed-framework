@@ -154,6 +154,11 @@ Hierarchical levels are reflected in the app:
   each Category and Section label is followed by the number of content Slides it
   would contribute to Presenter Mode; empty and hidden Slides are excluded, and
   a hierarchy item with no qualifying Slides shows `(0)`.
+- On the App landing Slide, the first ordered Subject is selected and its first
+  ordered Category is expanded in the sidebar. On a Subject landing Slide, that
+  Subject's first ordered Category is expanded. These landing states do not mark
+  a Category or Section active. Subject-suppressed Apps apply the same behavior
+  to their single structural Subject.
 - Levels are shown in navigation above the Slide content.
 - One Slide occupies the content pane at a time, so App content must remain
   organized into digestible Slide units.

@@ -1,5 +1,9 @@
 # um-agentic-ed
 
+> **NOTICE**: The `um-agentic-ed` system is in beta development and while usable 
+> at present may not be fully stable. We anticipate a first stable release in 
+> late 2026.
+
 `um-agentic-ed` is a system for building education web apps that are interactive
 and dynamically updatable. Apps promote progressive, self-guided learning,
 foster team learning, and exploit generative AI to help both educators and learners.
