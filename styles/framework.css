@@ -480,9 +480,17 @@ body.presenter-mode .slide-content .gpt-followups h2 { font-size: 1.1em; }
 }
 .slide-content .text-block pre, .slide-content .block-lead-markdown pre {
   overflow-x: auto;
-  padding: .75rem;
-  background: #eef3f6;
+  padding: 0.55rem 0.75rem;
+  background: #f1f2f3;
   border-radius: 4px;
+  border: 1px solid #d9dee2;
+  font-size: 120%;
+}
+p > code, li > code {
+  background: #f1f2f3;
+  border-radius: 4px;
+  border: 1px solid #d9dee2;
+  padding: 0 .15rem;
 }
 .slide-content .image-block {
   display: block;
@@ -542,7 +550,7 @@ body.presenter-mode .slide-content table {
 .question-choices { padding-left: 1.5rem; }
 .question-choices li { margin: .6rem 0; }
 .question-prompt { margin: 0 0 1rem; }
-.question-feedback { margin-top: 1rem; padding: .8rem; background: #eef3f6; border-radius: 4px; }
+.question-feedback { margin-top: 1rem; padding: 0.55rem 0.75rem; background: #eef3f6; border-radius: 4px; }
 .question-feedback--correct { background: #e6f4ea; }
 .question-feedback--incorrect { background: #fbe9e9; }
 .slide-content .question-block { margin: 0 0 1.25rem; }
