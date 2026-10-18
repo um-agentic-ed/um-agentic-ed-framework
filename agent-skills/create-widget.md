@@ -7,7 +7,7 @@ the app's Editor mode and **saved** the Slide — this skill only authors the
 `<widget>.js` file on disk; it never touches the running app.
 
 Follow the slash command with the target, in either form:
-- Shorthand: `/build-app create-or-update-widget <subject>/<category>/<section>/<slide> [widget-name]`.
+- Shorthand: `/build-app create-widget <subject>/<category>/<section>/<slide> [widget-name]`.
   Omit `widget-name` if the Slide has exactly one widget block.
 - Plain language: describe the Slide and/or widget. Resolve this by searching
   `content-index.js` and the relevant `slide.js` file rather than guessing.

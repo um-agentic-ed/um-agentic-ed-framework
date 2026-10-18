@@ -294,7 +294,9 @@ repository that wraps this instance of the `um-agentic-ed-framework` repository.
   <subject>/               Folder for a first-level Subject in the header popup
     subject.js             Landing slide shown to introduce a Subject
     <category>/            Folder for a second-level Category in the sidebar navigator
+      AGENTS.md            Content generation instructions that apply to all Category Slides 
       category.js          Landing slide shown to introduce a Category
+      _trusted_sources/    Files usable as prioritized context throughout the Category
       <section>/           Folder for a nested third-level Section in the sidebar navigator
         AGENTS.md          Content generation instructions that apply to all Section Slides 
         section.js         Landing slide shown to introduce a Section
@@ -535,21 +537,28 @@ type-specific fields:
   list of allowed file extensions to load, and a `prompt` field with short text
   to show to ask for the file.
 - `instructions` block: an `instructions` field containing retained instructions
-  for an Agent. It is supported on individual Slides and Section landing Slides,
+  for an Agent. It is supported on individual Slides and Category and Section landing Slides,
   shown only in Editor mode, and never rendered in Learner Mode.
   - On an individual Slide, it directs generation or revision of that Slide's
     learner-facing content. Editors save the Slide, then run
-    `/build-app fill-or-update-slide <slide-path>`.
+    `/build-app generate-content <slide-path>`.
   - On a Section landing Slide, it directs generation or revision of multiple
     child Slides across that Section. Editors save the Section, then run
-    `/build-app fill-or-update-section <section-path>`.
+    `/build-app generate-content <section-path>`.
+  - On a Category landing Slide, it directs generation or revision across that
+    Category and may direct creation, organization, or revision of child Sections
+    and their Slides. Editors save the Category, then run
+    `/build-app generate-content <category-path>`.
   - The Agent uses all retained instructions blocks in order and leaves them
     unchanged unless explicitly asked to remove them.
-- `trustedSources` block: a Section-landing-only block stored in `section.js`, with
-  a `files` array containing file names from that Section's `_trusted_sources`
-  folder. On the Section landing slide, the files are rendered to Learners as
-  links at the bottom of the slide contents, after an `<hr>` and explanatory
-  text, but before bottom navigation. They remain excluded from GPT prompt text.
+- `trustedSources` block: a Category- or Section-landing-only block stored in
+  `category.js` or `section.js`, with a `files` array containing file names from
+  that landing scope's `_trusted_sources` folder. On the landing slide, the files
+  are rendered to Learners as links at the bottom of the slide contents, after
+  an `<hr>` and explanatory text, but before bottom navigation. They remain
+  excluded from GPT prompt text. A Category source is available as context for
+  any Slide in that Category. A Section source is available only within its own
+  Section and must not be used for a sister Section.
 - `divider` block: renders an `<hr>` to visually separate Blocks on a Slide. It
   has no fields beyond `type` and does not accept a `markdown` lead-in.
 - `gptFollowup` block: a Slide-only `questions` array of short learner-facing
@@ -693,12 +702,16 @@ Agent-generated content must be drawn from high-quality information sources:
 - Information should be verifiable.
 - When newer, less well verified information is presented, external links to 
   publications or other peer reviewed content should be provided.
-- Section-level `_trusted_sources` folders allow Editors to provide context 
-  files that:
+- Category- and Section-level `_trusted_sources` folders allow Editors to provide
+  context files that:
   - Are trusted and allowed as information sources.
   - Should be prioritized when generating content, but should not be considered
     as exclusive context and can be supported by other content as outlined above.
   - Are not pushed to servers with the repository due to settings in `.gitignore`.
+  - Apply throughout their declared scope: Category sources may be used by all
+    child Sections, while Section sources apply only to that Section. Agents
+    working on a Section or Slide use applicable Category sources plus sources
+    from that Slide's own Section, never sources from a sister Section.
 - Additional App-specific content guidance is provide by `../../AGENTS.md`, the 
   specific content generation prompt, and any applicable `instructions` blocks.
 

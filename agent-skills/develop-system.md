@@ -146,8 +146,9 @@ unless the brief also changes the shared contract that governs them.
 
 - For `image`, `link`, `widget`, and `dataFile` blocks, show optional `markdown`
   as the first Editor input and keep it attached when its Block is reordered.
-- A `trustedSources` block manages Section `_trusted_sources` files through File
-  System Access controls that add, overwrite, and remove files.
+- A `trustedSources` block on a Category or Section landing Slide manages that
+  landing scope's `_trusted_sources` files through File System Access controls
+  that add, overwrite, and remove files.
 - A Question block's choices use a nested Sortable list inside the Slide's outer
   sortable Block list.
 - If a widget block has no matching generated `<widget>.js`, show a placeholder

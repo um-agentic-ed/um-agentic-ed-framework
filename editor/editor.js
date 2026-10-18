@@ -110,6 +110,15 @@
   function isSectionLanding() {
     return Boolean(current && current.kind === "overview" && current.key.split("/").length === 3);
   }
+  function isCategoryLanding() {
+    return Boolean(current && current.kind === "overview" && current.key.split("/").length === 2);
+  }
+  function isContentGenerationLanding() {
+    return isCategoryLanding() || isSectionLanding();
+  }
+  function contentGenerationScopeName() {
+    return isCategoryLanding() ? "Category" : "Section";
+  }
   function isSlide() {
     return Boolean(current && current.kind === "slide");
   }
@@ -228,7 +237,7 @@
   }
 
   async function uploadTrustedSource(file, block, rerenderSources) {
-    if (!file || !isSectionLanding()) return;
+    if (!file || !isContentGenerationLanding()) return;
     const evaluation = evaluateTrustedSourceFile(file);
     if (evaluation.action === "reject") {
       alert(evaluation.message);
@@ -248,7 +257,7 @@
     try {
       const existingFile = await window.umedEditorFS.getExistingFile(rootHandle, relativePath);
       if (existingFile && !(await editorConfirm(
-        `A trusted source named "${file.name}" already exists in this Section. Overwrite it?`,
+        `A trusted source named "${file.name}" already exists in this ${contentGenerationScopeName()}. Overwrite it?`,
         { confirmLabel: "Overwrite", cancelLabel: "Keep existing" }
       ))) return;
       await window.umedEditorFS.writeBinaryFile(rootHandle, relativePath, file);
@@ -263,7 +272,7 @@
   }
 
   async function removeTrustedSource(fileName, block, rerenderSources) {
-    if (!isSectionLanding()) return;
+    if (!isContentGenerationLanding()) return;
     const action = await chooseFileRemovalAction(fileName, "trusted source");
     if (!action) return;
     if (!window.umedEditorFS) {
@@ -308,7 +317,7 @@
       if (!fileName) return;
       const activePath = trustedSourcesRelativePath(fileName);
       if (await window.umedEditorFS.getExistingFile(rootHandle, activePath)) {
-        alert(`A trusted source named "${fileName}" already exists in this Section.`);
+        alert(`A trusted source named "${fileName}" already exists in this ${contentGenerationScopeName()}.`);
         return;
       }
       await window.umedEditorFS.moveFile(rootHandle, `${unusedDir}/${fileName}`, activePath);
@@ -421,7 +430,8 @@
 
     const note = document.createElement("p");
     note.className = "editor-widget-note";
-    note.textContent = "Files are stored in this Section's _trusted_sources folder for Agents and listed as downloadable references at the bottom of the Section landing slide. Searchable text, PDF, and modern Office files work best.";
+    const scopeName = contentGenerationScopeName();
+    note.textContent = `Files are stored in this ${scopeName}'s _trusted_sources folder for Agents and listed as downloadable references at the bottom of the ${scopeName} landing slide. Searchable text, PDF, and modern Office files work best.`;
     fieldset.append(note, dropZone);
     rerenderSources();
   }
@@ -1192,15 +1202,14 @@
         markDirty();
       });
       autoSizeTextarea(instructions);
-      const sectionInstructions = isSectionLanding();
-      fieldset.append(field(sectionInstructions
-        ? "Section instructions (for an Agent)"
-        : "Slide instructions (for an Agent)", instructions));
+      const landingInstructions = isContentGenerationLanding();
+      const scopeName = landingInstructions ? contentGenerationScopeName() : "Slide";
+      fieldset.append(field(`${scopeName} instructions (for an Agent)`, instructions));
 
       const note = document.createElement("p");
       note.className = "editor-widget-note";
-      note.textContent = sectionInstructions
-        ? "Section Slides don't update live. Save the Section, then run this prompt in chat:"
+      note.textContent = landingInstructions
+        ? `${scopeName} content doesn't update live. Save the ${scopeName}, then run this prompt in chat:`
         : "Slide content doesn't update live. Save the Slide, then run this prompt in chat:";
       fieldset.append(note);
 
@@ -1208,10 +1217,8 @@
       promptCode.className = "editor-widget-prompt";
       const targetKey = current
         ? current.key
-        : sectionInstructions ? "<subject>/<category>/<section>" : "<subject>/<category>/<section>/<slide>";
-      promptCode.textContent = sectionInstructions
-        ? `/build-app fill-or-update-section ${targetKey}`
-        : `/build-app fill-or-update-slide ${targetKey}`;
+        : landingInstructions ? "<subject>/<category>[/<section>]" : "<subject>/<category>/<section>/<slide>";
+      promptCode.textContent = `/build-app generate-content ${targetKey}`;
 
       const copyButton = document.createElement("button");
       copyButton.type = "button";
@@ -1302,7 +1309,7 @@
       promptCode.className = "editor-widget-prompt";
       const updatePrompt = () => {
         const slideKey = current ? current.key : "<subject>/<category>/<section>/<slide>";
-        promptCode.textContent = `/build-app create-or-update-widget ${slideKey} ${block.name || "<widget-name>"}`;
+        promptCode.textContent = `/build-app create-widget ${slideKey} ${block.name || "<widget-name>"}`;
       };
 
       const row = document.createElement("div");
@@ -1442,7 +1449,7 @@
       buildQuestionBlockFields(block, fieldset, rerender);
     } else if (block.type === "gptFollowup") {
       buildGptFollowupBlockFields(block, fieldset);
-    } else if (block.type === "trustedSources" && isSectionLanding()) {
+    } else if (block.type === "trustedSources" && isContentGenerationLanding()) {
       buildTrustedSourcesBlockFields(block, fieldset);
     } else if (block.type === "divider") {
       const note = document.createElement("p");
@@ -1547,8 +1554,8 @@
       const column = document.createElement("div");
       column.className = "editor-add-menu-column";
       items.filter(([label]) => {
-        if (label === "Instructions") return isSectionLanding() || isSlide();
-        if (label === "Trusted Sources") return isSectionLanding();
+        if (label === "Instructions") return isContentGenerationLanding() || isSlide();
+        if (label === "Trusted Sources") return isContentGenerationLanding();
         if (["Widget", "Question", "GPT Follow-up Prompts"].includes(label)) return isSlide();
         return true;
       }).forEach(([label, makeBlock]) => {

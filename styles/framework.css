@@ -471,7 +471,7 @@ body.presenter-mode .slide-content .gpt-followups h2 { font-size: 1.1em; }
   padding: .35rem .7rem;
   border: 1px solid #9ba7b1;
 }
-.slide-content .text-block th, .slide-content .block-lead-markdown th, .question-prompt th { background: #eef3f6; }
+.slide-content .text-block th, .slide-content .block-lead-markdown th, .question-prompt th { background: #f1f2f3; }
 .slide-content .text-block blockquote, .slide-content .block-lead-markdown blockquote {
   margin: 0 0 1rem;
   padding: .1rem 1rem;

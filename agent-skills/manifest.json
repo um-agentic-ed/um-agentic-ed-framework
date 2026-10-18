@@ -2,46 +2,40 @@
   "skillManifestSchemaVersion": 1,
   "buildAppTasks": [
     {
-      "name": "create-or-update-widget",
-      "description": "Create or update a Slide widget from its saved widget-block instructions.",
-      "argumentHint": "<subject>/<category>/<section>/<slide> [widget-name]",
-      "file": "create-or-update-widget.md"
+      "name": "set-app-identity",
+      "description": "Set app identity, subject usage, editor names, and branding.",
+      "argumentHint": "[requested identity or branding changes]",
+      "file": "set-app-identity.md"
+    },
+    {
+      "name": "import-powerpoint",
+      "description": "Convert a PowerPoint presentation into app Slides.",
+      "argumentHint": "<subject>/<category>/<section>",
+      "file": "import-powerpoint.md"
     },
     {
       "name": "fill-app-outline",
-      "description": "Generate missing landing slides from app-outline.xlsx.",
+      "description": "Generate missing tree levels and landing slides from app-outline.xlsx.",
       "argumentHint": "",
       "file": "fill-app-outline.md"
     },
     {
-      "name": "fill-or-update-section",
-      "description": "Generate or update multiple Slides from a Section's saved instructions.",
-      "argumentHint": "<subject>/<category>/<section>",
-      "file": "fill-or-update-section.md"
+      "name": "generate-content",
+      "description": "Generate or update one or more slides from saved instructions.",
+      "argumentHint": "<subject>/<category>[/<section>[/<slide>]]",
+      "file": "generate-content.md"
     },
     {
-      "name": "fill-or-update-slide",
-      "description": "Generate or update one Slide from its saved instructions.",
-      "argumentHint": "<subject>/<category>/<section>/<slide>",
-      "file": "fill-or-update-slide.md"
-    },
-    {
-      "name": "import-powerpoint",
-      "description": "Faithfully convert a PowerPoint presentation into App Slides.",
-      "argumentHint": "<subject>/<category>/<section>",
-      "file": "import-powerpoint.md"
+      "name": "create-widget",
+      "description": "Create or update a slide widget from its saved widget-block instructions.",
+      "argumentHint": "<subject>/<category>/<section>/<slide> [widget-name]",
+      "file": "create-widget.md"
     },
     {
       "name": "index-slides",
       "description": "Validate and synchronize the content manifest, ordering, and search keywords.",
       "argumentHint": "",
       "file": "index-slides.md"
-    },
-    {
-      "name": "set-app-identity",
-      "description": "Set App identity, Subject usage, Editor names, and branding.",
-      "argumentHint": "[requested identity or branding changes]",
-      "file": "set-app-identity.md"
     }
   ]
 }
