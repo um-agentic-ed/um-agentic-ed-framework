@@ -44,3 +44,4 @@
 .green-bold-large { color: #2f855a; font-weight: 600; font-size: 120%; }
 .blue-bold-large { color: #005a9c; font-weight: 600; font-size: 120%; }
 .purple-bold-large { color: #7a3e9d; font-weight: 600; font-size: 120%; }
+.nbsp { color: transparent; font-family: monospace, monospace; font-size: 120%; }
