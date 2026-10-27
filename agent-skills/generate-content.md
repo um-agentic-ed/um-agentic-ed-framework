@@ -23,11 +23,10 @@ scope; do not read or change educational content outside it.
 ## Instructions for the agent
 
 Read the [Parent AGENTS.md](../../../AGENTS.md) and the
-[Framework AGENTS.md](../AGENTS.md) in full before proceeding. Read the relevant
-files in the target Category's `_trusted_sources` folder. Within every target
-Section, also read its `AGENTS.md`, if present, and relevant files in its own
-`_trusted_sources` folder. Category sources apply throughout the Category;
-Section sources apply only to their own Section and never to a sister Section.
+[Framework AGENTS.md](../AGENTS.md) in full before proceeding. Category trusted
+sources apply throughout the Category; Section sources apply only to their own
+Section and never to a sister Section. Resolve all applicable trusted-source
+entries as required below before reading them or generating content.
 
 1. **Resolve the target and scope.** Locate the exact target in
    `src/content/content-index.js` and classify it by path depth:
@@ -47,23 +46,67 @@ Section sources apply only to their own Section and never to a sister Section.
    to add and save an Instructions block; do not add one directly. Retain every
    instruction block exactly as saved, including its content and relative
    position, unless the Editor explicitly requests its removal.
-3. **Inventory only the authorized scope.** For a Category or Section, read the
+3. **Preflight every applicable trusted source before content generation.**
+   Inspect every `trustedSources.files` entry that applies to the target: the
+   parent Category entries for Category, Section, and Slide targets; the target
+   Section entries for a Section or Slide target; and every child Section's own
+   entries when a Category target may modify that Section. Normalize legacy
+   filename-string entries as `{ file, url: "", label: "" }` when interpreting
+   them, but do not rewrite them merely for normalization.
+   - If `file` is nonempty and that exact file exists in the landing scope's
+     `_trusted_sources` folder, the entry is resolved. Use that local file as
+     context regardless of whether `url` is blank, invalid, unreachable, or
+     points somewhere else.
+   - If `file` is blank, or names a missing file, inspect `url`. It must be a
+     public `https://` or `http://` URL to remain resolvable. Reject localhost,
+     loopback, link-local, private-network, and cloud-metadata destinations,
+     including destinations reached after redirects. Never put credentials,
+     tokens, PHI, or other sensitive values in a URL.
+   - Download only when the URL resolves directly to a file suitable as Agent
+     context. Treat a recognizable safe document/data/image filename in the URL
+     path, a safe attachment filename in `Content-Disposition`, or an
+     unambiguous non-HTML file content type as evidence of a direct file. Do not
+     download a normal HTML web page, database record, search result, login page,
+     or other non-file resource into `_trusted_sources`; a URL-only non-file
+     entry may remain a link/reference if it is valid and reachable, but it is
+     not local file context. A non-file URL cannot resolve an entry whose
+     nonempty `file` declaration is missing.
+   - Reject executables, installers, scripts with unsafe execution implications,
+     malformed responses, authentication/error pages, and files that violate
+     repository security rules. Confirm that the response type, extension, and
+     contents are mutually plausible. Derive a safe filename from
+     `Content-Disposition` or the final URL path, preserve a meaningful supported
+     extension, and never silently overwrite a different existing file. Ask the
+     Editor before accepting an unexpectedly large or ambiguous download.
+   - Stage candidate downloads in a temporary location outside the project.
+     Validate the complete applicable source set before writing any staged file,
+     changing any `trustedSources` declaration, or modifying generated content.
+     If every entry resolves, move staged files into their applicable
+     `_trusted_sources` folders and set each downloaded entry's `file` to its
+     final filename while preserving `url` and `label`; then read the applicable
+     local files as context. If any entry remains unresolved, discard staged
+     downloads, report every problem together, and make no project changes.
+     Ask whether the Editor wants to fix the sources or explicitly continue
+     without the unresolved entries. Only after that choice may the Agent commit
+     the resolvable downloads and proceed; continuing never authorizes use of an
+     unresolved source as factual support.
+4. **Inventory only the authorized scope.** For a Category or Section, read the
    applicable child landing Slides, child `slide.js` files, and matching index
    entries. For a Slide, read that Slide and its matching index entry. Assess
    existing coverage, duplication, Levels, ordering, learner progression,
-   assets, relevant sources, and Slide-level retained instructions. A
-   Existing Section- and Slide-level instructions supplement a Category brief
+   assets, relevant sources, and Slide-level retained instructions. Existing
+   Section- and Slide-level instructions supplement a Category brief
    when the Agent modifies their respective descendants. Existing Slide-level
    instructions supplement a Section brief when that Slide is revised. Lower-level
    instructions do not expand the selected scope, and Category instructions do
    not apply when the selected target is a Section or Slide.
-4. **Apply the saved brief.** Combine applicable instruction text in block order
+5. **Apply the saved brief.** Combine applicable instruction text in block order
    with the target title, local guidance, trusted sources applicable to each
    Slide, existing lower-level instructions, and repository requirements. Later instruction
    blocks take precedence over earlier ones at the same scope. Repository
    instructions remain authoritative. Ask the Editor before changing content
    if a material ambiguity or unresolved conflict remains.
-5. **Author learner-facing content appropriate to the scope.**
+6. **Author learner-facing content appropriate to the scope.**
    - For a Category, create, organize, or revise child Sections and Slides as
      its brief requires. Respect retained instructions on existing Sections and
      Slides when modifying them.
@@ -79,7 +122,7 @@ Section sources apply only to their own Section and never to a sister Section.
    safe Markdown, image attribution, and approved widget/data-file contracts.
    Do not remove an existing Section or Slide unless the applicable saved brief
    explicitly requires it; ask if deletion intent is ambiguous.
-6. **Preserve identity and assign metadata.** Preserve each retained Slide's
+7. **Preserve identity and assign metadata.** Preserve each retained Slide's
    UUID and `slideSchemaVersion`. A title, Level, or order change does not imply
    an id/path change. Rename an id/path only when the applicable saved brief
    explicitly requires it; preserve the UUID and coordinate the
@@ -91,7 +134,7 @@ Section sources apply only to their own Section and never to a sister Section.
    complete folder, landing Slide, current schema version, newly generated UUID,
    and matching index entry. Do not change landing Slide learner-facing content
    unless the applicable saved brief explicitly requests it.
-7. **Synchronize index and search metadata.** Make only the target scope's
+8. **Synchronize index and search metadata.** Make only the target scope's
    corresponding changes in `content-index.js`. For each new Slide or Slide
    whose title or learner-facing content changed, set `contentUpdatedAt` in
    `slide.js` to the current ISO 8601 timestamp, regenerate its normalized
@@ -100,23 +143,28 @@ Section sources apply only to their own Section and never to a sister Section.
    index entry. Preserve conforming keywords and timestamps for unchanged
    Slides. Ensure every entry matches its Slide's id, UUID, title, Level, and
    order.
-8. **Respect scope and task boundaries.** Category work may touch its
+9. **Respect scope and task boundaries.** Category work may touch its
    `category.js`, Category `_trusted_sources` declarations, descendants, and
    corresponding index branch; Section work may touch
    only its `section.js`, child Slide folders and assets, and corresponding
    index entry; Slide work may touch only its folder and matching index entry.
+   Trusted-source preflight is a narrow exception: for any target depth, it may
+   write validated downloads to applicable Category or Section
+   `_trusted_sources` folders and update only the matching entries' `file`
+   fields in those landing files. It must not alter other landing-slide content.
    Change a Section-local `AGENTS.md` only when explicitly requested. Do not
    create or regenerate widget JavaScript merely because a widget block is
    authored; use `create-widget` for that task.
-9. **Validate the result.** Check changed JavaScript syntax; confirm disk/index
+10. **Validate the result.** Check changed JavaScript syntax; confirm disk/index
    correspondence, schema versions, UUID uniqueness, folder and registration
    keys, Levels, and ordering; ensure removed Slides are absent from both disk
    and index; verify referenced local assets exist and every question has
    exactly one correct choice; and screen additions for protected health
    information, credentials, secrets, unsafe code, and copyrighted downloads.
    Preserve the standard `window.umedAppContent[...]` assignment format.
-10. **Report.** Identify the resolved scope and summarize Slides created,
+11. **Report.** Identify the resolved scope and summarize Slides created,
     revised, retained unchanged, or removed. Describe the final Level
     progression when working above one Slide, note regenerated keyword metadata,
-    and call out assumptions, source limitations, widgets awaiting generation,
-    or decisions needing Editor review.
+    identify trusted sources downloaded or left as URL-only references, and call
+    out assumptions, unresolved or unused sources, source limitations, widgets
+    awaiting generation, or decisions needing Editor review.

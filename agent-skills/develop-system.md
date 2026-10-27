@@ -148,7 +148,11 @@ unless the brief also changes the shared contract that governs them.
   as the first Editor input and keep it attached when its Block is reordered.
 - A `trustedSources` block on a Category or Section landing Slide manages that
   landing scope's `_trusted_sources` files through File System Access controls
-  that add, overwrite, and remove files.
+  that add, overwrite, and remove files. Each entry also carries a public URL
+  and optional link label; Learners are linked only to that URL, never to the
+  local context file. Editors may upload or drop a file, or add a URL-only source
+  for the `generate-content` skill to resolve before content generation, and may
+  reorder entries by dragging their handles.
 - A Question block's choices use a nested Sortable list inside the Slide's outer
   sortable Block list.
 - If a widget block has no matching generated `<widget>.js`, show a placeholder

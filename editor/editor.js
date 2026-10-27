@@ -228,6 +228,19 @@
     return `${current.key}/_trusted_sources/_unused/${fileName}`;
   }
 
+  function normalizeTrustedSourceEntry(entry) {
+    if (typeof entry === "string") return { file: entry, url: "", label: "" };
+    return {
+      file: String((entry && entry.file) || ""),
+      url: String((entry && entry.url) || ""),
+      label: String((entry && entry.label) || "")
+    };
+  }
+
+  function trustedSourceFileName(entry) {
+    return normalizeTrustedSourceEntry(entry).file;
+  }
+
   async function chooseFileRemovalAction(fileName, kind) {
     if (!window.umedComponents || !window.umedComponents.chooseOption) return null;
     return window.umedComponents.chooseOption(
@@ -262,7 +275,10 @@
       ))) return;
       await window.umedEditorFS.writeBinaryFile(rootHandle, relativePath, file);
       block.files = Array.isArray(block.files) ? block.files : [];
-      if (!block.files.includes(file.name)) block.files.push(file.name);
+      const existingEntry = block.files.find(entry => trustedSourceFileName(entry) === file.name);
+      if (!existingEntry) {
+        block.files.push({ file: file.name, url: "", label: "" });
+      }
       rerenderSources();
       scheduleRefresh();
     } catch (error) {
@@ -271,8 +287,15 @@
     }
   }
 
-  async function removeTrustedSource(fileName, block, rerenderSources) {
+  async function removeTrustedSource(sourceEntry, block, rerenderSources) {
     if (!isContentGenerationLanding()) return;
+    const fileName = trustedSourceFileName(sourceEntry);
+    if (!fileName) {
+      block.files = (block.files || []).filter(entry => entry !== sourceEntry);
+      rerenderSources();
+      scheduleRefresh();
+      return;
+    }
     const action = await chooseFileRemovalAction(fileName, "trusted source");
     if (!action) return;
     if (!window.umedEditorFS) {
@@ -293,7 +316,7 @@
       } else {
         await window.umedEditorFS.deleteFile(rootHandle, trustedSourcesRelativePath(fileName));
       }
-      block.files = (block.files || []).filter(name => name !== fileName);
+      block.files = (block.files || []).filter(entry => trustedSourceFileName(entry) !== fileName);
       rerenderSources();
       scheduleRefresh();
     } catch (error) {
@@ -321,7 +344,9 @@
         return;
       }
       await window.umedEditorFS.moveFile(rootHandle, `${unusedDir}/${fileName}`, activePath);
-      if (!block.files.includes(fileName)) block.files.push(fileName);
+      if (!(block.files || []).some(entry => trustedSourceFileName(entry) === fileName)) {
+        block.files.push({ file: fileName, url: "", label: "" });
+      }
       rerenderSources();
       scheduleRefresh();
     } catch (error) {
@@ -368,32 +393,97 @@
     });
   }
 
-  function buildTrustedSourcesBlockFields(block, fieldset) {
+  async function addTrustedSourceUrl(block, rerenderSources) {
+    if (!window.umedComponents || typeof window.umedComponents.promptText !== "function") return;
+    const entered = await window.umedComponents.promptText("Enter the public URL of a trusted source:", {
+      confirmLabel: "Add Source",
+      initialValue: ""
+    });
+    if (entered === null) return;
+    let publicUrl;
+    try {
+      const parsed = new URL(entered);
+      if (parsed.protocol !== "https:" && parsed.protocol !== "http:") throw new Error();
+      publicUrl = parsed.href;
+    } catch (_error) {
+      alert("Enter a complete public URL beginning with https:// or http://.");
+      return;
+    }
     block.files = Array.isArray(block.files) ? block.files : [];
+    if (block.files.some(entry => normalizeTrustedSourceEntry(entry).url === publicUrl)) {
+      alert("That trusted source URL is already listed in this block.");
+      return;
+    }
+    block.files.push({ file: "", url: publicUrl, label: "" });
+    rerenderSources();
+    scheduleRefresh();
+  }
+
+  function buildTrustedSourcesBlockFields(block, fieldset) {
+    block.files = Array.isArray(block.files) ? block.files.map(normalizeTrustedSourceEntry) : [];
     const list = document.createElement("div");
     list.className = "editor-trusted-sources";
 
     function rerenderSources() {
       list.replaceChildren();
-      block.files.forEach((fileName, index) => {
-        const row = document.createElement("div");
-        row.className = "editor-trusted-source-row";
+      block.files.forEach((entry, index) => {
+        const item = document.createElement("div");
+        item.className = "editor-trusted-source-item";
+        const handle = document.createElement("span");
+        handle.className = "editor-trusted-source-handle";
+        handle.textContent = DRAG_HANDLE_GLYPH;
+        handle.title = `Reorder trusted source ${index + 1}`;
+        handle.setAttribute("aria-hidden", "true");
+        const identityRow = document.createElement("div");
+        identityRow.className = "editor-trusted-source-row";
         const name = document.createElement("input");
         name.type = "text";
         name.readOnly = true;
-        name.value = fileName;
+        name.value = entry.file;
+        name.placeholder = "No local file";
         name.setAttribute("aria-label", `Trusted source ${index + 1} file name`);
+        const label = document.createElement("input");
+        label.type = "text";
+        label.placeholder = "Label";
+        label.value = entry.label;
+        label.setAttribute("aria-label", `Trusted source ${index + 1} link label`);
+        label.addEventListener("input", () => { entry.label = label.value; scheduleRefresh(); });
+        identityRow.append(name, label);
+        const urlRow = document.createElement("div");
+        urlRow.className = "editor-trusted-source-row";
+        const url = document.createElement("input");
+        url.type = "url";
+        url.placeholder = "URL";
+        url.value = entry.url;
+        url.setAttribute("aria-label", `Trusted source ${index + 1} public URL`);
+        url.addEventListener("input", () => { entry.url = url.value; scheduleRefresh(); });
         const removeButton = document.createElement("button");
         removeButton.type = "button";
         removeButton.className = "editor-trusted-source-remove";
         removeButton.textContent = "\u00d7";
-        removeButton.title = `Remove ${fileName}`;
-        removeButton.setAttribute("aria-label", `Remove trusted source ${fileName}`);
-        removeButton.addEventListener("click", () => runEditorAction(() => removeTrustedSource(fileName, block, rerenderSources)));
-        row.append(name, removeButton);
-        list.append(row);
+        removeButton.title = entry.file ? `Remove ${entry.file}` : "Remove URL source";
+        removeButton.setAttribute("aria-label", entry.file ? `Remove trusted source ${entry.file}` : `Remove URL source ${index + 1}`);
+        removeButton.addEventListener("click", () => runEditorAction(() => removeTrustedSource(entry, block, rerenderSources)));
+        urlRow.append(url, removeButton);
+        item.append(handle, identityRow, urlRow);
+        list.append(item);
       });
     }
+
+    Sortable.create(list, {
+      handle: ".editor-trusted-source-handle",
+      animation: 150,
+      ghostClass: "editor-trusted-source-item--ghost",
+      chosenClass: "editor-trusted-source-item--chosen",
+      dragClass: "editor-trusted-source-item--drag",
+      onEnd(event) {
+        if (event.oldIndex === event.newIndex) return;
+        const [moved] = block.files.splice(event.oldIndex, 1);
+        block.files.splice(event.newIndex, 0, moved);
+        rerenderSources();
+        scheduleRefresh();
+      }
+    });
 
     const uploadInput = document.createElement("input");
     uploadInput.type = "file";
@@ -402,7 +492,7 @@
     const addButton = document.createElement("button");
     addButton.type = "button";
     addButton.className = "editor-add-choice";
-    addButton.textContent = "Add Trusted Source";
+    addButton.textContent = "Upload a Source File";
     addButton.addEventListener("click", () => uploadInput.click());
     const addFiles = async files => {
       await runEditorAction(async () => {
@@ -419,20 +509,28 @@
     dropZone.className = "editor-file-drop-zone";
     const dropHint = document.createElement("span");
     dropHint.className = "editor-file-drop-hint";
-    dropHint.textContent = "Drop trusted source files here or";
+    dropHint.textContent = "Drop a trusted source file or";
+    const addUrlButton = document.createElement("button");
+    addUrlButton.type = "button";
+    addUrlButton.className = "editor-add-choice";
+    addUrlButton.textContent = "Add URL Source";
+    addUrlButton.addEventListener("click", () => runEditorAction(
+      () => addTrustedSourceUrl(block, rerenderSources),
+      { showBusy: false }
+    ));
     const restoreButton = document.createElement("button");
     restoreButton.type = "button";
     restoreButton.className = "editor-add-choice";
     restoreButton.textContent = "Restore Source";
     restoreButton.addEventListener("click", () => runEditorAction(() => restoreTrustedSource(block, rerenderSources)));
-    dropZone.append(list, dropHint, addButton, restoreButton, uploadInput);
+    dropZone.append(dropHint, addButton, addUrlButton, restoreButton, uploadInput);
     attachFileDropTarget(dropZone, addFiles);
 
     const note = document.createElement("p");
     note.className = "editor-widget-note";
     const scopeName = contentGenerationScopeName();
-    note.textContent = `Files are stored in this ${scopeName}'s _trusted_sources folder for Agents and listed as downloadable references at the bottom of the ${scopeName} landing slide. Searchable text, PDF, and modern Office files work best.`;
-    fieldset.append(note, dropZone);
+    note.textContent = `Files are stored in this ${scopeName}'s _trusted_sources folder for Agents. A URL-only source will be downloaded during content generation if it is a file URL. A source is linked on the landing slide when it has a public URL, using the optional label. Searchable text, PDF, and Office files work best.`;
+    fieldset.append(note, list, dropZone);
     rerenderSources();
   }
 

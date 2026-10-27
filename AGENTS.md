@@ -552,13 +552,23 @@ type-specific fields:
   - The Agent uses all retained instructions blocks in order and leaves them
     unchanged unless explicitly asked to remove them.
 - `trustedSources` block: a Category- or Section-landing-only block stored in
-  `category.js` or `section.js`, with a `files` array containing file names from
-  that landing scope's `_trusted_sources` folder. On the landing slide, the files
-  are rendered to Learners as links at the bottom of the slide contents, after
-  an `<hr>` and explanatory text, but before bottom navigation. They remain
+  `category.js` or `section.js`, with a `files` array of objects containing
+  `file`, `url`, and `label` strings. `file` names a local context file in that
+  landing scope's `_trusted_sources` folder. `url` is its public HTTP(S) reference
+  (which may point to a related database record instead of the file itself), and
+  `label` is optional link text. An Editor may add a URL-only entry with an empty
+  `file`; during `generate-content`, an Agent resolves applicable entries before
+  generating content and may download direct file URLs into `_trusted_sources`.
+  On the landing slide, entries with a URL are
+  rendered to Learners as public links, using the URL itself when `label` is blank,
+  at the bottom of the slide contents, after an `<hr>` and explanatory text, but
+  before bottom navigation. Entries without a URL are omitted. Local files are
+  never linked directly and are not included in single-file exports. Sources remain
   excluded from GPT prompt text. A Category source is available as context for
   any Slide in that Category. A Section source is available only within its own
-  Section and must not be used for a sister Section.
+  Section and must not be used for a sister Section. Source entries retain their
+  `files` array order and Editors may reorder them by dragging. Editors may obtain
+  source files outside the app and upload or drop them into the trusted-sources block.
 - `divider` block: renders an `<hr>` to visually separate Blocks on a Slide. It
   has no fields beyond `type` and does not accept a `markdown` lead-in.
 - `gptFollowup` block: a Slide-only `questions` array of short learner-facing

@@ -1634,35 +1634,39 @@
     elements.slide.append(heading, message);
   }
 
-  function renderTrustedSources(blocks, parent, landingKey, scopeName) {
-    if (window.umedSingleFileExport) return;
-    const browserViewableExtensions = new Set([
-      "avif", "bmp", "csv", "gif", "htm", "html", "jpeg", "jpg", "json", "md", "pdf",
-      "png", "svg", "text", "txt", "webp", "xml"
-    ]);
-    const fileNames = blocks
+  function renderTrustedSources(blocks, parent, scopeName) {
+    const sources = blocks
       .filter(block => block.type === "trustedSources" && Array.isArray(block.files))
       .flatMap(block => block.files)
-      .map(fileName => String(fileName || "").trim())
-      .filter(Boolean)
-      .filter((fileName, index, all) => all.indexOf(fileName) === index);
-    if (!fileNames.length) return;
+      .map(entry => typeof entry === "object" && entry ? {
+        url: String(entry.url || "").trim(),
+        label: String(entry.label || "").trim()
+      } : null)
+      .filter(source => {
+        if (!source || !source.url) return false;
+        try {
+          const parsed = new URL(source.url);
+          return parsed.protocol === "https:" || parsed.protocol === "http:";
+        } catch (_error) {
+          return false;
+        }
+      });
+    if (!sources.length) return;
 
     const wrapper = document.createElement("section");
     wrapper.className = "trusted-sources-display";
     wrapper.append(document.createElement("hr"));
     const introduction = document.createElement("p");
-    introduction.textContent = `The following files were used as trusted information sources for slides in this ${scopeName}:`;
+    introduction.textContent = `The following references were used as trusted information sources for this ${scopeName}:`;
     wrapper.append(introduction);
     const list = document.createElement("ul");
-    fileNames.forEach(fileName => {
+    sources.forEach(source => {
       const item = document.createElement("li");
       const link = document.createElement("a");
-      link.href = `${CONTENT_ROOT}/${landingKey}/_trusted_sources/${encodeURIComponent(fileName)}`;
-      const extension = fileName.includes(".") ? fileName.split(".").pop().toLowerCase() : "";
-      if (browserViewableExtensions.has(extension)) link.target = "app_trusted_source";
-      else link.download = fileName;
-      link.textContent = fileName;
+      link.href = source.url;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.textContent = source.label || source.url;
       item.append(link);
       list.append(item);
     });
@@ -1723,7 +1727,7 @@
         if (block.type !== "trustedSources") renderBlock(block, elements.slide, assetBasePath);
       }
       if (navigationTarget && navigationTarget.kind === "category") {
-        renderTrustedSources(data.content.blocks || [], elements.slide, key, "category");
+        renderTrustedSources(data.content.blocks || [], elements.slide, "category");
       }
       if (navigationTarget && navigationTarget.kind === "app") renderSubjectList(elements.slide);
       if (navigationTarget) renderBottomNavigation(navigationTarget, elements.slide);
@@ -1779,7 +1783,7 @@
       elements.slide.append(promptContent);
       slidePromptContent = promptContent;
       renderGptFollowups(data.content.blocks || [], elements.slide);
-      if (isOverview) renderTrustedSources(data.content.blocks || [], elements.slide, key, "section");
+      if (isOverview) renderTrustedSources(data.content.blocks || [], elements.slide, "section");
       renderBottomNavigation(target, elements.slide);
       return true;
     };
