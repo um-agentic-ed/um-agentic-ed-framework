@@ -32,6 +32,53 @@
   let currentSaveButton = null;
   let currentDiscardButton = null;
 
+  // Deliberately conservative low-value vocabulary. Search terms should identify Slide-specific
+  // concepts, not articles, connectors, auxiliary verbs, or generic instructional wording.
+  const SEARCH_STOP_WORDS = new Set([
+    "about", "after", "again", "also", "among", "and", "are", "because", "been", "before",
+    "being", "between", "both", "but", "can", "could", "did", "does", "doing", "each", "for",
+    "from", "had", "has", "have", "having", "how", "into", "its", "may", "more", "most", "not",
+    "now", "only", "other", "our", "out", "over", "should", "some", "such", "than", "that",
+    "the", "their", "them", "then", "there", "these", "they", "this", "those", "through", "under",
+    "use", "used", "using", "very", "was", "were", "what", "when", "where", "which", "while",
+    "who", "why", "will", "with", "would", "you", "your"
+  ]);
+
+  function markdownSearchText(value, inline = false) {
+    if (window.umedApp && typeof window.umedApp.visibleMarkdownText === "function") {
+      return window.umedApp.visibleMarkdownText(value, inline);
+    }
+    return String(value || "");
+  }
+
+  function slideSearchText(data) {
+    const parts = [data.title || ""];
+    for (const block of ((data.content && data.content.blocks) || [])) {
+      if (!block || block.type === "instructions" || block.type === "gptFollowup") continue;
+      if (["text", "image", "link", "widget", "dataFile"].includes(block.type)) {
+        parts.push(markdownSearchText(block.markdown));
+      }
+      if (block.type === "image") parts.push(block.alt || "", block.label || "");
+      else if (block.type === "link") parts.push(block.label || "");
+      else if (block.type === "dataFile") parts.push(block.prompt || "");
+      else if (block.type === "question") {
+        parts.push(markdownSearchText(block.prompt));
+        for (const choice of (block.choices || [])) {
+          parts.push(markdownSearchText(choice.text, true), markdownSearchText(choice.feedback, true));
+        }
+      }
+    }
+    return parts.join(" ");
+  }
+
+  function buildSlideKeywords(data) {
+    const keywords = slideSearchText(data)
+      .split(/[\s\-\u2010-\u2015]+/u)
+      .map(token => token.replace(/^\p{P}+|\p{P}+$/gu, "").toLowerCase())
+      .filter(token => token.length >= 3 && !SEARCH_STOP_WORDS.has(token));
+    return [...new Set(keywords)].sort();
+  }
+
   // Editor mode only shows this pane after a Ctrl-click (Cmd-click on Mac) on the app title (see
   // main.js resolveRoute/editorModeActive), so this is a reliable guard against building forms
   // while the pane is hidden.
@@ -804,6 +851,10 @@
       contentRelativePath(info.src),
       serializeContentFile(info, candidate)
     );
+    if (info.kind === "slide") {
+      syncIndexEntry(info.key, candidate, info.kind, updatedAt);
+      await writeIndexFile(rootHandle);
+    }
 
     snapshot.content = snapshot.content || {};
     snapshot.content.blocks = snapshot.content.blocks || [];
@@ -1982,7 +2033,7 @@
   // saved content object therefore reconciles the corresponding manifest record. Keys are the
   // content path: <subject>, <subject>/<category>, <subject>/<category>/<section>, or for a
   // Slide <subject>/<category>/<section>/<slide>.
-  function syncIndexEntry(key, data, kind) {
+  function syncIndexEntry(key, data, kind, keywordsUpdatedAt) {
     const index = window.umedAppContentIndex;
     if (!index) return;
     const path = key.split("/");
@@ -2005,6 +2056,10 @@
       entry.title = data.title;
       entry.level = data.level;
       entry.order = data.order;
+      if (keywordsUpdatedAt) {
+        entry.keywords = buildSlideKeywords(data);
+        entry.keywordsUpdatedAt = keywordsUpdatedAt;
+      }
     }
   }
 
@@ -2102,6 +2157,7 @@
     const key = `${subjectId}/${categoryId}/${sectionId}/${data.id}`;
     data.contentUpdatedAt = new Date().toISOString();
     window.umedAppContent[key] = data;
+    syncIndexEntry(key, data, "slide", data.contentUpdatedAt);
     await window.umedEditorFS.writeTextFile(rootHandle, `${key}/slide.js`, serializeContentFile({ kind: "slide", key }, data));
     await writeSlideOrderFiles(rootHandle, subjectId, categoryId, sectionId, otherChangedEntries);
     await writeIndexFile(rootHandle);
@@ -2295,15 +2351,16 @@
     const data = window.umedAppContent[info.key];
     if (!data) throw new Error(`Content is unavailable for ${info.key}.`);
 
+    const savedAt = new Date().toISOString();
     const savedData = savedSnapshots.get(info.key);
     if (info.kind === "slide" && (!savedData || learnerFacingSignature(savedData) !== learnerFacingSignature(data))) {
-      data.contentUpdatedAt = new Date().toISOString();
+      data.contentUpdatedAt = savedAt;
     }
 
     const relativePath = contentRelativePath(info.src);
     await window.umedEditorFS.writeTextFile(rootHandle, relativePath, serializeContentFile(info, data));
 
-    syncIndexEntry(info.key, data, info.kind);
+    syncIndexEntry(info.key, data, info.kind, info.kind === "slide" ? savedAt : undefined);
     if (info.kind === "slide" || info.kind === "overview") await writeIndexFile(rootHandle);
 
     dirtyKeys.delete(info.key);

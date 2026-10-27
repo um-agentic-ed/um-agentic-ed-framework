@@ -2620,6 +2620,16 @@
     const renderer = getMarkdownRenderer();
     return renderer ? renderer.renderInline(String(text || "")) : escapeHtml(text || "");
   }
+
+  // Returns the text a Learner sees after Markdown rendering. Editor Mode uses this when building
+  // search keywords so Markdown destinations and syntax do not leak into the search index, while
+  // inline-image alt text (which textContent does not normally include) remains searchable.
+  function visibleMarkdownText(text, inline = false) {
+    const container = document.createElement("div");
+    container.innerHTML = inline ? renderMarkdownInline(text) : renderMarkdown(text);
+    for (const image of container.querySelectorAll("img")) image.replaceWith(image.alt || "");
+    return container.textContent || "";
+  }
   // Question blocks can appear any number of times, mixed with other block types, on a single
   // Slide, so each instance needs its own independent radio group name (a static shared name, as
   // used when Question was a whole Slide type, would let a Learner's answer on one Question
@@ -3024,6 +3034,7 @@
   // through this object, only through window.umedAppContent, so main.js stays the single source of
   // truth for what is currently on screen.
   window.umedApp = {
+    visibleMarkdownText,
     refreshSlide: () => {
       if (currentDraw) currentDraw();
       if (isEditorUiActive()) refreshSidebarPresenterCounts(activeSubject(), sidebarCountLabels);

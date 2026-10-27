@@ -251,7 +251,7 @@ the App's identity or branding:
     - widget JavaScript source, internal identifiers, and data/code values
     - Subject, Category, and Section landing slides
     - GPT follow-up prompts
-- Content Agents must include only keywords of at least three characters and omit
+- Keyword generators must include only keywords of at least three characters and omit
   trivial, low-complexity words such as articles, prepositions, and frequently
   used verbs. Indexed keywords should be specific to the unique content of the
   App.
@@ -665,14 +665,15 @@ document type and refuses to overwrite an incompatible document.
 - `subjects[].order`, `categories[].order` and `sections[].order` determine display order
   and default "first Section"/"first Slide" navigation targets, using the
   same spaced-increment convention as Slide `order`.
-- `slides[].keywords` is an Agent-generated array of searchable terms used
+- `slides[].keywords` is a generated array of searchable terms used
   without loading full Slide content. Its extraction, normalization, and
   included Slide elements are governed by
   [Searching](#searching): every entry is one deduplicated lowercase word, and
-  Slide-title words are included. It is not an Editor-authored field and does
+  Slide-title words are included. Editor Mode regenerates it when a content Slide is saved, and
+  content Agents regenerate it when authoring or indexing Slides. It is not an Editor-authored field and does
   not include Category/Section landing-slide content or retained instructions.
-- `slides[].keywordsUpdatedAt` is an ISO 8601 timestamp recording the
-  `contentUpdatedAt` version from which `keywords` were generated. An Agent
+- `slides[].keywordsUpdatedAt` is an ISO 8601 timestamp recording when
+  `keywords` were generated. Editor Mode refreshes it whenever a content Slide is saved. An Agent
   refreshes keywords when this field is absent or older than the Slide's
   `contentUpdatedAt`; it should not regenerate unchanged keyword lists merely
   because an indexing pass runs.

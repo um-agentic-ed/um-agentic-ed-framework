@@ -79,7 +79,7 @@ follow the Framework's Content Index, Slide metadata, and keyword rules.
    all ranks use the normalized spacing; all landing and content UUIDs are
    canonical and globally unique; `appOverviewUuid` and hierarchy UUIDs match
    their landing files; and every Slide has a deduplicated lowercase single-word
-   keyword list whose index `keywordsUpdatedAt` matches the authoritative Slide
+   keyword list whose index `keywordsUpdatedAt` is at least as recent as the authoritative Slide
    `contentUpdatedAt`. Report
    the validation status, count of repaired entries, count of ranks changed,
    and Slides whose keywords were generated or refreshed.
