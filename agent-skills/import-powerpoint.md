@@ -10,7 +10,7 @@ imported PowerPoint file. Do not change content outside the target Section.
 
 This skill performs a faithful, non-creative conversion: it reproduces the
 PowerPoint's existing content in the Slide schema and does not summarize,
-rewrite, add, or omit substantive content. Where repository or Section-level
+rewrite, add, or omit substantive content. Where repository or Section-tree-level
 `instructions` would otherwise direct content generation, editorializing, or
 omission, this skill's non-creative conversion rules take precedence;
 retained instructions may only adjust scope-neutral details such as which
@@ -150,14 +150,17 @@ before proceeding. Also read the target Section's own
     in Framework `app/schema-contract.js`; set `order` to the prior
     existing Slide's highest `order` plus successive increments of 10,
     without renumbering any existing Slide; and set `level` to the same
-    Level as the Section's last existing Slide (or `foundations` if the
-    Section has none), applying one Level to the whole converted batch unless
-    a retained instruction explicitly directs specific Level breaks. Build the
+    Level as the Section's last existing Slide (or the kebab-case identifier of
+    the first available name in `app.js:window.umedAppIdentity.slideLevels`),
+    applying one Level to the whole converted batch unless Levels are suppressed
+    or a retained instruction explicitly directs specific Level breaks. Build the
     complete Slide object required by the Framework schema, including `id`,
-    `uuid`, `slideSchemaVersion`, `contentUpdatedAt`, `title`, `level`, `order`, and
-    `content.blocks`; do not rely on its folder, registration key, or index
+    `uuid`, `slideSchemaVersion`,
+    `contentUpdatedAt`, `title`, `order`, and `content.blocks` (plus `level` when
+    Levels are enabled); do not rely on its folder, registration key, or index
     entry to substitute for a missing field. Do not modify the Section landing
-    Slide's title, content, or retained instructions.
+    Slide's title, content, or
+    retained instructions.
 12. **Synchronize the manifest and search metadata.** Add the target
     Section's new Slide entries to `content-index.js`; do not modify or
     remove existing entries. For each new Slide, set the Slide file's

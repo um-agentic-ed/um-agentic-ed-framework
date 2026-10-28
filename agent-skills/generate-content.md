@@ -111,9 +111,8 @@ entries as required below before reading them or generating content.
      its brief requires. Respect retained instructions on existing Sections and
      Slides when modifying them.
    - For a Section, create, organize, or revise as many child Slides as its
-     brief requires. Build a coherent progression within and across
-     `foundations`, `core-learning`, and `advanced-topics`, using only the
-     Levels needed.
+     brief requires. Build a coherent progression within and across the app's slide
+     levels when they are not suppressed in `app.js`, using only the Levels needed.
    - For a Slide, add, replace, or revise only the non-`instructions` blocks
      needed to fulfill its brief. Do not change its title, id, UUID, schema
      version, Level, order, folder, or registration key.

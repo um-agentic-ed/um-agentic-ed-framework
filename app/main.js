@@ -4,6 +4,9 @@
   const schemaContract = window.umedSchemaContract;
   const index = window.umedAppContentIndex;
   const identity = window.umedAppIdentity || {};
+  const SLIDE_LEVELS = schemaContract.getSlideLevels(identity);
+  const LEVELS = SLIDE_LEVELS.map(level => level.id);
+  const LEVEL_TITLES = Object.fromEntries(SLIDE_LEVELS.map(level => [level.id, level.title]));
   // The one place the content folder path is declared; the Editor and widget host read it too.
   const CONTENT_ROOT = window.umedContentRoot = "src/content";
   const contentStore = window.umedAppContent = window.umedAppContent || {};
@@ -1928,8 +1931,8 @@
     ];
     slideText = hierarchy.join("\n") + slideText.slice(slideTitle.length);
     slideText = slideText.replace(/\n/g, "\n> ");
-    const learnerLevel = identity.learnerLevel ? `${identity.learnerLevel} ` : "";
-    const prompt = `I am a ${learnerLevel}learner in ${identity.discipline || "this subject"}. ` +
+    const userLevel = identity.userLevel ? `${identity.userLevel} ` : "";
+    const prompt = `I am a ${userLevel}learner/user in ${identity.discipline || "this subject"}. ` +
       "You are a professional and experienced practitioner and educator in that discipline. " + 
       "I would like further explanation on a teaching slide " +
       "I am reviewing whose text is quoted here.\n\n> " + slideText + "\n\n" +
@@ -1990,15 +1993,6 @@
     elements.gptToast.hidden = true;
   }
 
-  // Tier identifiers use kebab-case; display titles are centralized here so metadata and UI
-  // remain consistent without deriving titles from identifiers such as "core-learning".
-  const LEVELS = ["foundations", "core-learning", "advanced-topics"];
-  const LEVEL_TITLES = {
-    foundations: "Foundations",
-    "core-learning": "Core Learning",
-    "advanced-topics": "Advanced Topics"
-  };
-
   // Renders the Slides menu as a two-level tree (Level, then its Slides indented below) and, in
   // Editor mode, wires up Sortable.js drag-and-drop reordering. Only content Slides are listed;
   // the Section overview slide has its own link in the level navigation area, not this menu.
@@ -2013,19 +2007,22 @@
     destroySlideMenuSortables();
     elements.menu.replaceChildren();
     const section = target.section || null;
-    for (const level of LEVELS) {
-      const slidesInLevel = section ? sorted(section.slides.filter(item => item.level === level)) : [];
+    const menuLevels = LEVELS.length ? LEVELS : [null];
+    for (const level of menuLevels) {
+      const slidesInLevel = section
+        ? sorted(section.slides.filter(item => level === null || item.level === level))
+        : [];
       if (section && !slidesInLevel.length && !isEditorUiActive()) continue;
 
       const heading = document.createElement("div");
       heading.className = "slide-menu-level" + (slidesInLevel.length ? "" : " slide-menu-level--empty");
-      heading.textContent = LEVEL_TITLES[level];
+      heading.textContent = level === null ? "Slides" : LEVEL_TITLES[level];
       elements.menu.append(heading);
       if (section && isEditorUiActive()) elements.menu.append(createSlideSpacer(target, level, 0));
 
       const list = document.createElement("div");
       list.className = "slide-menu-list";
-      list.dataset.level = level;
+      list.dataset.level = level || "";
       elements.menu.append(list);
 
       slidesInLevel.forEach((slide, index) => {
@@ -2099,12 +2096,15 @@
   // neighbors has closed to nothing. Returns the Slide index entries whose order/level changed
   // and must be persisted to disk (always including `slide` itself).
   function insertSlideAtPosition(section, slide, toLevel, insertAtInLevel) {
-    const levelIndex = LEVELS.indexOf(toLevel);
-    const earlierLevelSlides = LEVELS.slice(0, levelIndex)
-      .flatMap(level => sorted(section.slides.filter(item => item.id !== slide.id && item.level === level)));
-    const laterLevelSlides = LEVELS.slice(levelIndex + 1)
-      .flatMap(level => sorted(section.slides.filter(item => item.id !== slide.id && item.level === level)));
-    const sameLevelSlides = sorted(section.slides.filter(item => item.id !== slide.id && item.level === toLevel));
+    const levelsEnabled = LEVELS.length > 0;
+    const levelIndex = levelsEnabled ? LEVELS.indexOf(toLevel) : 0;
+    const earlierLevelSlides = levelsEnabled ? LEVELS.slice(0, levelIndex)
+      .flatMap(level => sorted(section.slides.filter(item => item.id !== slide.id && item.level === level))) : [];
+    const laterLevelSlides = levelsEnabled ? LEVELS.slice(levelIndex + 1)
+      .flatMap(level => sorted(section.slides.filter(item => item.id !== slide.id && item.level === level))) : [];
+    const sameLevelSlides = sorted(section.slides.filter(item =>
+      item.id !== slide.id && (!levelsEnabled || item.level === toLevel)
+    ));
 
     const clampedIndex = Math.max(0, Math.min(insertAtInLevel, sameLevelSlides.length));
     sameLevelSlides.splice(clampedIndex, 0, slide);
@@ -2113,7 +2113,8 @@
     const previousSlide = globalIndex > 0 ? fullOrdered[globalIndex - 1] : null;
     const nextSlide = globalIndex < fullOrdered.length - 1 ? fullOrdered[globalIndex + 1] : null;
 
-    slide.level = toLevel;
+    if (levelsEnabled) slide.level = toLevel;
+    else delete slide.level;
     const changed = [];
 
     let assignedOrder = null;
@@ -2262,11 +2263,16 @@
       return;
     }
 
-    const levelIndex = LEVELS.indexOf(level);
-    const slidesInLevelOrder = LEVELS.flatMap(item => sorted(section.slides.filter(slide => slide.level === item)));
-    const slidesBeforeLevel = LEVELS.slice(0, levelIndex)
-      .reduce((count, item) => count + section.slides.filter(slide => slide.level === item).length, 0);
-    const slidesInLevel = section.slides.filter(slide => slide.level === level).length;
+    const levelsEnabled = LEVELS.length > 0;
+    const levelIndex = levelsEnabled ? LEVELS.indexOf(level) : 0;
+    const slidesInLevelOrder = levelsEnabled
+      ? LEVELS.flatMap(item => sorted(section.slides.filter(slide => slide.level === item)))
+      : sorted(section.slides);
+    const slidesBeforeLevel = levelsEnabled ? LEVELS.slice(0, levelIndex)
+      .reduce((count, item) => count + section.slides.filter(slide => slide.level === item).length, 0) : 0;
+    const slidesInLevel = levelsEnabled
+      ? section.slides.filter(slide => slide.level === level).length
+      : section.slides.length;
     const breakIndex = slidesBeforeLevel + Math.max(0, Math.min(insertAtInLevel, slidesInLevel));
     const movedSlides = slidesInLevelOrder.slice(breakIndex);
 

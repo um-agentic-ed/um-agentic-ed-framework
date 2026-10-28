@@ -45,7 +45,7 @@ skill-manifest version declared in `app/schema-contract.js`.
 
 The app has three page states:
 - *Learner Mode* is the default state where Learners view and interact with 
-  educational content, take notes on third-level Slides, and follow up using GPT. 
+  educational content, take notes on Slides, and follow up using GPT. 
 - *Editor Mode* provides list actions and an editing pane for organizing and
   modifying App content, with immediate live updates in the Editor's browser
   whenever possible and permanent changes saved to the App's Parent repository.
@@ -79,7 +79,7 @@ The app has three page states:
 
 # Hierarchical content organization
 
-Educational content is structured in hierarchical levels:
+Educational content is structured in hierarchical tree levels:
 - An *App* is focused on one broad educational context or discipline, e.g., a 
   college course.
 - A *Subject* defines one focus area in the context of the App; Subjects are 
@@ -87,8 +87,9 @@ Educational content is structured in hierarchical levels:
   default Subject that is hidden in the UI. 
 - A *Category* groups major content objectives within a Subject.
 - A *Section* groups educational topics within a Category.
-- A *Level* orders content by difficulty. 
-    - *Foundations* (`foundations`) establish or refresh entry-level knowledge 
+- A *Level* orders content by difficulty; Slide Levels are subject to change by 
+  Editors and can be suppressed in `app.js` but default to: 
+    - *Foundations* (`foundations`) establish or refresh entry knowledge 
       required for consuming the target educational content.
     - *Core Learning* (`core-learning`) is the target educational content for 
       the typical Learner the App is intended for.
@@ -96,15 +97,15 @@ Educational content is structured in hierarchical levels:
       nuanced information once Core Learning is mastered.
 - A *Slide* is one digestible unit of educational content that fits well on one
   display screen.
-  - Slides progressively build learning across all Levels within a Section.
+  - Slides progressively build learning across all Slide Levels within a Section.
 - A *Block* is one portion of a Slide's contents to support different UI elements.
   - Slide may have zero, one, or multiple instances of any Block type.
 - Thus:
   - An App has one or more Subjects (even when Subject usage is suppressed).
   - A Subject has one or more Categories.
   - A Category has one or more Sections.
-  - A Section has one to three Levels, as needed.
-  - A Level has zero or more Slides.
+  - A Section uses the App's configured Slide Levels, as needed, or no Slide Levels when suppressed.
+  - A Slide Level has zero or more Slides.
 - A Slide has a title and zero or more Blocks (Slide with no blocks are 
   suppressed in the UI).
 - A nested Subject, Category, Section, and Slide define the hierarchical path to 
@@ -132,9 +133,9 @@ readable, and usually unique without needing the title's full wording:
    would exceed the limit, even if that leaves only one word.
 4. If even the first word alone exceeds 20 characters, hard-truncate just that
    word to 20 characters rather than producing an empty `id`.
-5. If an `id` collides with a sibling at the same level, append `-2`, `-3`, etc.,
-   shortening the base `id` first if necessary so the suffixed `id` still fits
-   in 20 characters.
+5. If an `id` collides with a sibling at the same tree level, append `-2`, `-3`,
+   etc., shortening the base `id` first if necessary so the suffixed `id` still 
+   fitsin 20 characters.
 
 An Agent may abbreviate an individual long word (e.g. "replication" -> "repl")
 when doing so keeps the `id` recognizable, but abbreviation is not required.
@@ -143,10 +144,10 @@ when doing so keeps the `id` recognizable, but abbreviation is not required.
 
 ## Hierarchy and content presentation
 
-Hierarchical levels are reflected in the app:
+Hierarchical tree levels are reflected in the app:
 - When `subjectsEnabled` is true, Subjects are shown on the App landing Slide and
   selected from the header.
-- When `subjectsEnabled` is false, the Subject level remains in content storage,
+- When `subjectsEnabled` is false, the Subject tree-level remains in content storage,
   content keys, and URL paths but is hidden everywhere in the UI. The App has
   exactly one structural Subject whose id and title are both
   `app-subject`; its landing Slide has an empty `content.blocks` array.
@@ -159,7 +160,9 @@ Hierarchical levels are reflected in the app:
   Subject's first ordered Category is expanded. These landing states do not mark
   a Category or Section active. Subject-suppressed Apps apply the same behavior
   to their single structural Subject.
-- Levels are shown in navigation above the Slide content.
+- Configured Slide Levels are shown in navigation above the Slide content. When
+  Levels are suppressed, no Level buttons are shown and the Slides menu groups
+  all content Slides under the fixed heading "Slides".
 - One Slide occupies the content pane at a time, so App content must remain
   organized into digestible Slide units.
 
@@ -183,14 +186,19 @@ the App's identity or branding:
     not `appName`, is authoritative when validating an imported notes file.
   - `appTitle`: human-readable title, shown in both the app header and the
     browser tab. The HTML entrypoint carries no title of its own.
-  - `subjectsEnabled`: boolean indicating whether the Subject level is visible
+  - `subjectsEnabled`: boolean indicating whether the Subject tree-level is visible
     and editable in the App UI. Omitted values behave as `true` for backward
     compatibility. When `false`, the single structural Subject follows the
     `app-subject` invariant described above.
-  - `discipline`: the subject area Learners study, used with `learnerLevel` as
-    context in prompts sent to AI chat assistants.
-  - `learnerLevel`: the typical Learner the App targets, as an adjective phrase
-    that fits "I am a ___ learner" (e.g., "undergraduate", "post-graduate").
+  - `slideLevels`: an array of zero or more unique, nonempty display names. The
+    Framework derives each Slide `level` identifier by converting its display name
+    to kebab-case (for example, `Core Learning` becomes `core-learning`). Omit the
+    field to retain the default Levels for backward compatibility; use an empty
+    array to suppress Level navigation and Level grouping.
+  - `discipline`: the subject area of the app, used with `userLevel` as context 
+    in prompts sent to AI chat assistants.
+  - `userLevel`: the typical Learner/User the App targets, as an adjective phrase
+    that fits "I am a ___ learner/user" (e.g., "undergraduate", "post-graduate").
   - `chatbotUrl`: the `https://` (or `http://`) address of the AI chatbot to open
     when a Learner asks about a Slide, since developers prefer different chatbots.
     The prompt, with the Slide text, is copied to the clipboard for pasting there.
@@ -208,7 +216,7 @@ the App's identity or branding:
 - The hierarchical path to the current content is reflected in the visible URL.
 - Routes use hashes followed by paths that mirror the hierarchical content tree:
     - Pattern: `file:///<path>/<app-target>.html#/<subject>/<category>/<section>/<slide>`
-    - Levels are not part of a path; they are a Slide-level attribute.
+    - Slide Levels are not part of a path; they are a Slide attribute.
 - Navigating to a partial path shows its single overview, a.k.a "landing", slide:
   - The Slide for URL `#/<subject>/<category>/<section>` is read from landing slide
     `/src/content/<subject>/<category>/<section>/section.js`.
@@ -270,7 +278,7 @@ repository that wraps this instance of the `um-agentic-ed-framework` repository.
 /                    Root of the `um-agentic-ed-parent` clone 
   .github/skills/    Agent skills (one folder each, with a SKILL.md) for common repeated tasks
   app.css            App-specific branding colors as CSS custom properties.
-  app.js             Top-level App identity declared as window.umedAppIdentity.
+  app.js             App identity declared as window.umedAppIdentity.
   <app-target>.html  Stable App launcher that loads the Framework bootstrap; it may be renamed
   src/               Generated app code and structured educational content
 ```
@@ -287,31 +295,31 @@ repository that wraps this instance of the `um-agentic-ed-framework` repository.
 
 ```text
 /src/content/
-  app-overview.js          Top-level Slide shown on app start
+  app-overview.js          App overview Slide shown on app start
   content-index.js         Master file with metadata for all Subjects, Categories, Sections and Slides
   assets/                  Images and other files used by multiple Slides
     images/                Image asset files
-  <subject>/               Folder for a first-level Subject in the header popup
+  <subject>/               Folder for a first-tree-level Subject in the header popup
     subject.js             Landing slide shown to introduce a Subject
-    <category>/            Folder for a second-level Category in the sidebar navigator
+    <category>/            Folder for a second-tree-level Category in the sidebar navigator
       AGENTS.md            Content generation instructions that apply to all Category Slides 
       category.js          Landing slide shown to introduce a Category
       _trusted_sources/    Files usable as prioritized context throughout the Category
-      <section>/           Folder for a nested third-level Section in the sidebar navigator
+      <section>/           Folder for a nested third-tree-level Section in the sidebar navigator
         AGENTS.md          Content generation instructions that apply to all Section Slides 
         section.js         Landing slide shown to introduce a Section
         _trusted_sources/  Folder with files to use as prioritized context for generating Section Slides
-        <slide>/           Folder for a fourth-level Slide chosen by content page navigation
+        <slide>/           Folder for a fourth-tree-level Slide chosen by content page navigation
           slide.js         Single Slide Javascript file with structured educational content for display
           <asset>.xxx      Slide-specific asset files reside in the same folder as their slide.js
           <widget>.js      Agent-authored plot or table matching the widget host contract (see Widget file generation)
 ```
 
-Section-level `AGENTS.md` files provide guidance on how to populate educational 
+Section-tree-level `AGENTS.md` files provide guidance on how to populate educational 
 content and build widgets, but the Parent and Framework `AGENTS.md` files remain
 the authoritative instructions for app structure.
 
-Section titles and other Section-level metadata not tied to individual Slides 
+Section titles and other Section-tree-level metadata not tied to individual Slides 
 are stored in `content-index.js`.
 
 ## App launch contract
@@ -383,7 +391,7 @@ The actual file must contain only `window.umedAppLock = <JSON object>;`, with no
 executable statements beyond that assignment. The comments in this example are 
 explanatory and need not appear in the file.
 
-- Agents must acquire the lock with an operating-system-level atomic 
+- Agents must acquire the lock with an operating-system atomic 
   create-if-absent operation.
 - Acquire it after receiving authorization before doing further work on planning,
   execution, and projection mutation.
@@ -445,7 +453,7 @@ note entries before applying the existing same-App and drawing-security checks.
 
 ## Slide fields
 
-Every content Slide has the following top-level fields:
+Every content Slide has the following fields:
 - `id`, a kebab-case unique identifier, unique within its `<subject>/<category>/<section>`
 - `uuid`, an immutable canonical UUID v4 that uniquely identifies the Slide
   independently of its route. It is generated once when the Slide is created,
@@ -456,9 +464,11 @@ Every content Slide has the following top-level fields:
   Its value must equal `window.umedSchemaContract.slide.current`, declared by
   the installed Framework in `app/schema-contract.js`; Agents must read that
   declaration rather than copying a version literal from examples or older Apps.
-- `level`, the Level of the Slide (`foundations`, `core-learning`, or `advanced-topics`)
+- `level`, the kebab-case identifier of the Slide Level if Slide Levels are not
+  suppressed, derived from one of `app.js:window.umedAppIdentity.slideLevels`.
+  It may be omitted when Slide Levels are suppressed.
 - `order`, the rank order of a Slide within its Section
-  - Increases across all Section Levels (Levels are not separately numbered)
+  - Increases across all Slide Levels in a Section (Levels are not separately numbered)
   - Uses spaced values (e.g., increments of 10) so new Slides can be inserted
     without renumbering existing Slides
 - `title`, a human-readable subject heading
@@ -679,7 +689,7 @@ document type and refuses to overwrite an incompatible document.
   because an indexing pass runs.
 - The index does **not** duplicate full Slide `content`; only fields needed
   for navigation, routing, and search are present.
-- Subject ids become top-level folders in `src/content` and content keys, so
+- Subject ids become child folders in `src/content` and content keys, so
   `assets` and `app-overview` are reserved and must not
   be used as Subject ids.
 - A Subject-suppressed App has exactly one Subject entry. Its `id` and `title`
@@ -713,7 +723,7 @@ Agent-generated content must be drawn from high-quality information sources:
 - Information should be verifiable.
 - When newer, less well verified information is presented, external links to 
   publications or other peer reviewed content should be provided.
-- Category- and Section-level `_trusted_sources` folders allow Editors to provide
+- Category- and Section-tree-level `_trusted_sources` folders allow Editors to provide
   context files that:
   - Are trusted and allowed as information sources.
   - Should be prioritized when generating content, but should not be considered
@@ -727,7 +737,7 @@ Agent-generated content must be drawn from high-quality information sources:
   specific content generation prompt, and any applicable `instructions` blocks.
 
 When generating content for a Section, you should:
-- Order Slides to naturally build in difficulty within and across Levels.
+- Order Slides to naturally build in difficulty within and across Slide Levels.
 - Break Slides into Levels at natural transitions when there are more than ten
   Slides in a Level.
     - It is not required to use all Levels for every Section of Slides.
@@ -754,9 +764,8 @@ When generating content for a Section, you should:
     standard GPT app context and the Slide text, so follow-up suggestions only 
     need to provide a specific additional exploration of a Slide-related topic.
   - Suggestions should remain topical to the Slide and not go off on unrelated 
-    tangents. Appropriate suggestions might explore sub-heading-level content 
-    the Slide omitted for brevity, more advanced considerations, nuances or 
-    tricky exceptions, etc. 
+    tangents. Appropriate suggestions might explore content the Slide omitted for 
+    brevity, more advanced considerations, nuances or tricky exceptions, etc. 
 
 ## Image content blocks
 - Agents may generate new image content as well as text.

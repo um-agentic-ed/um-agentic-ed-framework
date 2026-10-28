@@ -7,7 +7,7 @@
   const SKILL_MANIFEST_SCHEMA_VERSION = 1;
   const NOTES_FILE_FORMAT = "umed-learner-notes";
   const UUID_V4_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-  const LEVELS = new Set(["foundations", "core-learning", "advanced-topics"]);
+  const DEFAULT_SLIDE_LEVEL_TITLES = Object.freeze(["Foundations", "Core Learning", "Advanced Topics"]);
 
   function failure(documentType, path, version, message) {
     return {
@@ -47,6 +47,49 @@
     return typeof value === "number" && Number.isFinite(value);
   }
 
+  function slideLevelId(title) {
+    return String(title || "")
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+  }
+
+  // Omitted slideLevels retain the original three Levels for compatibility. An explicit empty
+  // array suppresses Level navigation. Titles are app-facing labels; their normalized ids are
+  // the values stored in content Slide and index `level` fields.
+  function getSlideLevels(identity = window.umedAppIdentity || {}) {
+    const titles = identity.slideLevels === undefined ? DEFAULT_SLIDE_LEVEL_TITLES : identity.slideLevels;
+    if (!Array.isArray(titles)) return [];
+    return titles.map(title => Object.freeze({ id: slideLevelId(title), title: String(title).trim() }));
+  }
+
+  function validateSlideLevelConfiguration(identity = window.umedAppIdentity || {}) {
+    if (identity.slideLevels !== undefined && !Array.isArray(identity.slideLevels)) {
+      return "app.js slideLevels must be an array of Level-name strings.";
+    }
+    const sourceTitles = identity.slideLevels === undefined ? DEFAULT_SLIDE_LEVEL_TITLES : identity.slideLevels;
+    const levels = getSlideLevels(identity);
+    const ids = new Set();
+    for (let index = 0; index < levels.length; index += 1) {
+      const level = levels[index];
+      if (typeof sourceTitles[index] !== "string" || !level.title) {
+        return "app.js slideLevels must contain only nonempty strings.";
+      }
+      if (!level.id) return `app.js Slide Level "${level.title}" must contain at least one letter or number.`;
+      if (ids.has(level.id)) return `app.js Slide Levels must have unique identifiers; "${level.id}" is duplicated.`;
+      ids.add(level.id);
+    }
+    return "";
+  }
+
+  function validateSlideLevel(value) {
+    const levels = getSlideLevels();
+    // Suppression deliberately tolerates retained legacy level fields, allowing an App to turn
+    // Levels off without first rewriting all existing content. Newly created Slides omit it.
+    return !levels.length || levels.some(level => level.id === value);
+  }
+
   function validateVersion(documentType, path, field, actual, expected) {
     if (!Number.isInteger(actual)) {
       return failure(documentType, path, actual, `${field} must be the integer ${expected}.`);
@@ -66,6 +109,9 @@
     const documentType = "content index";
     const rootPath = "src/content/content-index.js";
     if (!isObject(index)) return failure(documentType, rootPath, undefined, "The index must be an object.");
+
+    const levelConfigurationProblem = validateSlideLevelConfiguration();
+    if (levelConfigurationProblem) return failure(documentType, rootPath, index.indexSchemaVersion, levelConfigurationProblem);
 
     const versionFailure = validateVersion(
       documentType,
@@ -143,7 +189,7 @@
             else {
               seenUuids.add(slide.uuid.toLowerCase());
               if (!isNonemptyString(slide.title)) problem = `${slidePath}.title must be a nonempty string.`;
-              else if (!LEVELS.has(slide.level)) problem = `${slidePath}.level is not supported.`;
+              else if (!validateSlideLevel(slide.level)) problem = `${slidePath}.level is not supported by app.js slideLevels.`;
               else if (!isOrder(slide.order)) problem = `${slidePath}.order must be a finite number.`;
               else if (!Array.isArray(slide.keywords) || slide.keywords.some(keyword => typeof keyword !== "string")) {
                 problem = `${slidePath}.keywords must be an array of strings.`;
@@ -163,6 +209,9 @@
     const kind = options.kind === "slide" ? "content Slide" : "landing Slide";
     const path = options.path || options.key || "unknown content file";
     if (!isObject(slide)) return failure(kind, path, undefined, "The Slide must be an object.");
+
+    const levelConfigurationProblem = validateSlideLevelConfiguration();
+    if (levelConfigurationProblem) return failure(kind, path, slide.slideSchemaVersion, levelConfigurationProblem);
 
     const versionFailure = validateVersion(
       kind,
@@ -185,7 +234,9 @@
     }
     if (options.kind === "slide") {
       if (!isNonemptyString(slide.id)) return failure(kind, path, slide.slideSchemaVersion, "id must be a nonempty string.");
-      if (!LEVELS.has(slide.level)) return failure(kind, path, slide.slideSchemaVersion, "level is not supported.");
+      if (!validateSlideLevel(slide.level)) {
+        return failure(kind, path, slide.slideSchemaVersion, "level is not supported by app.js slideLevels.");
+      }
       if (!isOrder(slide.order)) return failure(kind, path, slide.slideSchemaVersion, "order must be a finite number.");
       if (!isNonemptyString(slide.contentUpdatedAt)) {
         return failure(kind, path, slide.slideSchemaVersion, "contentUpdatedAt must be a nonempty string.");
@@ -319,6 +370,8 @@
     validateNotesFile,
     validateNoteRecord,
     validateSkillManifest,
+    getSlideLevels,
+    validateSlideLevelConfiguration,
     diagnostic,
     assertWritable
   });

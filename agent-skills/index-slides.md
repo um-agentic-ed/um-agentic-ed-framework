@@ -48,8 +48,10 @@ follow the Framework's Content Index, Slide metadata, and keyword rules.
    or by updating a stale manifest entry from its valid Slide file.
 3. **Normalize rank order in one pass.** Preserve the current displayed order:
    sort Subjects, Categories and Sections by their current `order`; within each Section,
-   sort Slides first by Level (`foundations`, `core-learning`,
-   `advanced-topics`) and then current `order`. Assign Subject, Category, Section, and
+   sort Slides first by the kebab-case identifiers derived from
+   `app.js:window.umedAppIdentity.slideLevels`, when Levels are enabled, and then
+   by current `order`. When Levels are suppressed, sort Slides only by current
+   `order`. Assign Subject, Category, Section, and
    Slide orders `10, 20, 30, ...` in that order. Write changed Slide `order`
    values to their individual `slide.js` files and write all resulting metadata
    to `content-index.js`. Do not use Level as a separate order sequence.

@@ -3,7 +3,7 @@
 ## Usage
 
 Invoke skill `/build-app set-app-identity` right after cloning `um-agentic-ed-parent` to start
-a new App, or later to change the App's title, discipline, learner level, chatbot,
+a new App, or later to change the App's title, discipline, learner/user level, chatbot,
 Subject usage, or colors. It normally edits the Parent root files `app.js` and
 `app.css`; changing Subject usage may also require a coordinated content-index
 and Subject-folder migration. Changing only the App title or name does not.
@@ -24,8 +24,8 @@ branding, content structure, and editing boundaries.
      the browser tab. Keep it short enough to fit in the header.
    - `discipline`: the subject area Learners study, phrased to complete "I am 
      a learner in ...", e.g., "organic chemistry".
-   - `learnerLevel`: the typical Learner, as an adjective phrase that fits "I 
-     am a ___ learner", e.g., "high school", "undergraduate", "post-graduate".
+   - `userLevel`: the typical Learner/User, as an adjective phrase that fits "I 
+     am a ___ learner/user", e.g., "high school", "undergraduate", "post-graduate".
    - `chatbotUrl`: the web address of the AI chatbot opened when a Learner asks 
      about a Slide, e.g., `https://chatgpt.com/` or `https://claude.ai/`. Ask which 
      chatbot the App's Learners use (an institutional one, if any). It must start 
@@ -34,6 +34,9 @@ branding, content structure, and editing boundaries.
      any provided value to lowercase `a-z`, `0-9` and hyphens only.
    - `subjectsEnabled`: whether Subjects are visible and editable. Offer the
      current value as the default. Omitted values mean `true` for compatibility.
+   - `slideLevels`: the requested display names for Slide navigation, in their
+     progression order. Each name becomes a kebab-case `level` identifier in
+     Slide files. Use an empty array to suppress Slide Levels.
    - Optional colors for `app.css` (`--umed-brand-bg`, `--umed-brand-text`, 
      `--umed-brand-hover-bg`, `--umed-brand-border`, `--umed-brand-accent`). 
      If the Editor names a color scheme, derive all five values from it; keep 
@@ -78,10 +81,12 @@ branding, content structure, and editing boundaries.
 6. **Validate.**
    - `appUuid` matches a canonical UUID v4 pattern.
    - `appName` matches `^[a-z0-9]+(-[a-z0-9]+)*$`.
-   - `appTitle`, `discipline` and `learnerLevel` are non-empty.
+   - `appTitle`, `discipline` and `userLevel` are non-empty.
    - `chatbotUrl` is either an empty string or starts with `https://` or `http://`.
    - `subjectsEnabled` is a boolean; when false, validate the complete hidden-
      Subject invariant and confirm every route-bearing content key uses its id.
+   - `slideLevels` is an array of zero or more unique, trimmed, nonempty strings
+     whose derived kebab-case identifiers are also unique.
    - `allowedEditorNames` is an array containing only unique, trimmed, nonempty 
       strings. An empty array is allowed and disables Editor Mode.
    - `app.js` still only assigns `window.umedAppIdentity` and parses 

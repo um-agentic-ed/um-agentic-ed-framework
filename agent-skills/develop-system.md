@@ -6,7 +6,7 @@
 make changes to the structure, logic, and codebase that defines the system, in 
 contrast to updating the educational content of a specific App. Agents must be 
 given explicit authorization to change system behavior; by invoking this Skill,
-a developer has indicated that an Agent is authorized to make system-level 
+a developer has indicated that an Agent is authorized to make app system/framework
 changes as directed by the developers specific further instructions.
 
 ## Instructions for the agent
@@ -18,8 +18,8 @@ changes as directed by the developers specific further instructions.
   instructions remain the authoritative contract for App structure and content;
   this Skill adds the implementation constraints needed to change that contract
   or the shared system that implements it.
-- Treat invocation of this Skill as authorization for system-level changes only
-  within the developer's stated brief. It does not authorize unrelated changes,
+- Treat invocation of this Skill as authorization for app system/framework changes 
+  only within the developer's stated brief. It does not authorize unrelated changes,
   compatibility breaks, or changes to App educational content.
 - Preserve compatibility with existing Apps unless the developer explicitly
   authorizes a breaking change after its impact is identified.
@@ -34,7 +34,7 @@ changes as directed by the developers specific further instructions.
 
 ### System change scope
 
-System-level changes include:
+App system/framework changes include:
 
 - Parent system structure files such as `.github/skills`, `.gitignore`,
   `.gitmodules`, the system-governed portions of the Parent `AGENTS.md`, and the
