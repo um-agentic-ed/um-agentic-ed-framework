@@ -60,14 +60,16 @@ follow the Framework's Content Index, Slide metadata, and keyword rules.
    from the learner-visible Slide elements specified in AGENTS.md Searching.
    Store every keyword as one deduplicated lowercase word, split on whitespace
    and hyphens with outer punctuation removed, and omit words shorter than
-   three characters and trivial/common language. Include Slide-title words;
-   exclude retained instructions, code, and Subject/Category/Section landing Slides.
-   Store `contentUpdatedAt` only in each Slide object and store `keywords` and
-   `keywordsUpdatedAt` only in its index entry; never add `contentUpdatedAt` to
+   three characters and trivial/common language consistent with the output of 
+   in-app keyword generation as executed by function 
+   `src/um-agentic-ed-framework/editor/editor.js:buildSlideKeywords`. Include 
+   Slide-title words; exclude retained instructions, code, and Subject/Category/Section 
+   landing Slides. Store `contentUpdatedAt` only in each Slide object and store `keywords` 
+   and `keywordsUpdatedAt` only in its index entry; never add `contentUpdatedAt` to
    an index entry. For legacy Slides without `contentUpdatedAt`, set the Slide's
    field and the index entry's `keywordsUpdatedAt` to one current ISO 8601
-   timestamp as a baseline; do not otherwise alter
-   learner-facing content. Preserve only already-current, conforming lists.
+   timestamp as a baseline; do not otherwise alter learner-facing content. 
+   Preserve only already-current, conforming lists.
 5. **Write consistently.** Update only `content-index.js` and Slide-file metadata
    (`order` and `contentUpdatedAt`) needed for this maintenance task. In the
    index, write navigation metadata plus `keywords` and `keywordsUpdatedAt` as

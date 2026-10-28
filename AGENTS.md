@@ -252,9 +252,9 @@ the App's identity or branding:
     - Subject, Category, and Section landing slides
     - GPT follow-up prompts
 - Keyword generators must include only keywords of at least three characters and omit
-  trivial, low-complexity words such as articles, prepositions, and frequently
-  used verbs. Indexed keywords should be specific to the unique content of the
-  App.
+  trivial, low-complexity words such as articles and prepositions. Indexed keywords 
+  should closely match the output of in-app keyword generation as executed by
+  function `src/um-agentic-ed-framework/editor/editor.js:buildSlideKeywords`.
 
 # File tree
 

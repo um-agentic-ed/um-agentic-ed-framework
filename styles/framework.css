@@ -282,10 +282,11 @@ button { cursor: pointer; }
   flex-direction: column;
   flex: 1 1 0;
   min-height: 0;
-  max-width: 1100px;
+  max-width: 900px;
   width: 100%;
   /* margin: 0 auto; */
 }
+#educational-content:has(#slide-menu:not([hidden])) { max-width: 1150px; }
 .content-toolbar {
   container-type: inline-size;
   display: grid;
@@ -768,8 +769,8 @@ body.presenter-mode .slide-content table {
    Editor pane, forms, block fieldsets, file drop zones, Add-block menu.
    ========================================================================== */
 /* Editor Mode is only ever active for file:/// URLs on Chromium/Safari, which support :has(). */
-#educational-content:has(.content-editor-row #editor-pane:not([hidden])) { max-width: 2200px; }
-#educational-content:has(.content-editor-row #learner-notepad:not([hidden])) { max-width: 2200px; }
+#educational-content:has(.content-editor-row #editor-pane:not([hidden])) { max-width: 1800px; }
+#educational-content:has(.content-editor-row #learner-notepad:not([hidden])) { max-width: 1800px; }
 /* Extra bottom room so the last field isn't flush with the pane's bottom edge. */
 .editor-pane {
   flex: 1 1 0;
