@@ -59,7 +59,9 @@ unless the brief also changes the shared contract that governs them.
 - Inputs and widgets are stateless between sessions except where the public
   contract explicitly stores values in IndexedDB or saved files.
 - Use HTML, CSS, and JavaScript and provide page content as static files.
-- New third-party libraries require developer approval. Prefer pinned CDN assets.
+- New third-party libraries require developer approval. Store approved browser-ready,
+  minified distributions and their license notices in versioned directories under
+  `third-party`; do not make the Framework runtime depend on a CDN.
   The approved shared libraries are markdown-it, Chart.js, Tabulator,
   Sortable.js, and Fabric.js for the purposes defined in the Framework
   `AGENTS.md`. Arbitrary learner-facing text must not be rendered as HTML outside
@@ -106,12 +108,13 @@ unless the brief also changes the shared contract that governs them.
   index entry; partial routes select the lowest-`order` applicable entry; and
   search suggestions prefix-match Slide keywords before deriving their Category
   and Section links.
-- Load approved widget libraries once through pinned bootstrap dependencies so
+- Load approved widget libraries once from the Framework's pinned, versioned
+  `third-party` files through bootstrap dependencies so
   they are available globally to widget files.
 
 ### Editor Mode implementation
 
-- Editor Mode is activated by Ctrl-clicking the App title (Cmd-click on macOS),
+- Editor Mode is activated by Ctrl/Cmd-clicking the App title (Cmd-click on macOS),
   leaves the current route unchanged, and provides list actions and an editing
   pane with immediate in-browser updates where possible.
 - Permanent saves require the Editor to select the Parent root through the File

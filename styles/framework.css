@@ -298,7 +298,7 @@ button { cursor: pointer; }
 }
 .content-toolbar[hidden] { display: none; }
 body.presenter-mode .main-pane { padding-top: 0; }
-body.presenter-mode #educational-content { max-width: 1100px; }
+body.presenter-mode #educational-content { max-width: 1100px; margin: 0 auto; }
 body.presenter-mode.whiteboard-open #educational-content { max-width: 2200px; }
 body.presenter-mode .slide-content .data-file-status { font-size: .85em; }
 body.presenter-mode .slide-content { font-size: .9em; }

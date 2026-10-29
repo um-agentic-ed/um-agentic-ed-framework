@@ -8,15 +8,40 @@
   // keeps a full-width image sharp on a 2x-density display without embedding unused source pixels.
   const MAX_EXPORT_IMAGE_WIDTH = 2200;
   const EXPORT_JPEG_QUALITY = 0.9;
-  const BUNDLED_SCRIPTS = [
+  // Widget registrations require widget-host.js to create window.umedAppWidgets, while main.js
+  // must run only after every embedded widget has registered so initial-route rendering can mount it.
+  const RUNTIME_BEFORE_WIDGETS = [
     "src/um-agentic-ed-framework/app/schema-contract.js",
     "src/um-agentic-ed-framework/components/icons.js",
     "src/um-agentic-ed-framework/components/data-files.js",
     "src/um-agentic-ed-framework/components/modal.js",
     "src/um-agentic-ed-framework/components/learner-notes.js",
-    "src/um-agentic-ed-framework/components/widget-host.js",
+    "src/um-agentic-ed-framework/components/widget-host.js"
+  ];
+  const RUNTIME_AFTER_WIDGETS = [
     "src/um-agentic-ed-framework/app/main.js"
   ];
+  const THIRD_PARTY = {
+    markdownIt: {
+      script: "src/um-agentic-ed-framework/third-party/markdown-it@14.1.0/markdown-it.min.js",
+      license: "src/um-agentic-ed-framework/third-party/markdown-it@14.1.0/LICENSE"
+    },
+    fabric: {
+      script: "src/um-agentic-ed-framework/third-party/fabric@5.3.0/fabric.min.js",
+      license: "src/um-agentic-ed-framework/third-party/fabric@5.3.0/LICENSE"
+    },
+    widgetScripts: [
+      "src/um-agentic-ed-framework/third-party/chart.js@4.5.1/chart.umd.min.js",
+      "src/um-agentic-ed-framework/third-party/tabulator-tables@6.5.3/tabulator.min.js",
+      "src/um-agentic-ed-framework/third-party/sortablejs@1.15.6/Sortable.min.js"
+    ],
+    widgetStyle: "src/um-agentic-ed-framework/third-party/tabulator-tables@6.5.3/tabulator.min.css",
+    widgetLicenses: [
+      "src/um-agentic-ed-framework/third-party/chart.js@4.5.1/LICENSE.md",
+      "src/um-agentic-ed-framework/third-party/tabulator-tables@6.5.3/LICENSE",
+      "src/um-agentic-ed-framework/third-party/sortablejs@1.15.6/LICENSE"
+    ]
+  };
 
   async function readFile(rootHandle, relativePath, description = "required file") {
     try {
@@ -287,10 +312,6 @@
     return JSON.stringify(value).replace(/</g, "\\u003c");
   }
 
-  function isWidgetDependency(value) {
-    return /(?:chart\.js|tabulator|sortablejs)/i.test(value || "");
-  }
-
   function downloadHtml(html, fileName) {
     const url = URL.createObjectURL(new Blob([html], { type: "text/html;charset=utf-8" }));
     const link = document.createElement("a");
@@ -346,14 +367,30 @@
       }
     }
 
-    const [frameworkCss, markdownCss, appCss, appScript, whiteboardScript, ...runtimeScripts] = await Promise.all([
+    const [
+      frameworkCss, markdownCss, appCss, appScript, whiteboardScript,
+      markdownItScript, fabricScript, markdownItLicense, fabricLicense,
+      runtimeBeforeWidgets, runtimeAfterWidgets
+    ] = await Promise.all([
       readText(rootHandle, "src/um-agentic-ed-framework/styles/framework.css"),
       readText(rootHandle, "src/um-agentic-ed-framework/styles/markdown-styles.css"),
       readText(rootHandle, "app.css"),
       readText(rootHandle, "app.js"),
       readText(rootHandle, "src/um-agentic-ed-framework/components/presenter-whiteboard.js"),
-      ...BUNDLED_SCRIPTS.map(path => readText(rootHandle, path))
+      readText(rootHandle, THIRD_PARTY.markdownIt.script),
+      readText(rootHandle, THIRD_PARTY.fabric.script),
+      readText(rootHandle, THIRD_PARTY.markdownIt.license),
+      readText(rootHandle, THIRD_PARTY.fabric.license),
+      Promise.all(RUNTIME_BEFORE_WIDGETS.map(path => readText(rootHandle, path))),
+      Promise.all(RUNTIME_AFTER_WIDGETS.map(path => readText(rootHandle, path)))
     ]);
+    const [widgetDependencyScripts, widgetDependencyStyle, widgetLicenses] = hasWidgets
+      ? await Promise.all([
+        Promise.all(THIRD_PARTY.widgetScripts.map(path => readText(rootHandle, path))),
+        readText(rootHandle, THIRD_PARTY.widgetStyle),
+        Promise.all(THIRD_PARTY.widgetLicenses.map(path => readText(rootHandle, path)))
+      ])
+      : [[], "", []];
 
     if (typeof window.umedFrameworkShellHtml !== "string" || !window.umedFrameworkShellHtml.trim()) {
       throw new Error("The Framework app shell is unavailable.");
@@ -362,48 +399,44 @@
       `<meta name="viewport" content="width=device-width, initial-scale=1"><title></title></head>` +
       `<body>${window.umedFrameworkShellHtml}</body></html>`;
     const documentCopy = new DOMParser().parseFromString(template, "text/html");
-    const markdownItScript = Array.from(document.querySelectorAll("script[src]"))
-      .find(script => /(?:^|\/)markdown-it(?:\.min)?\.js(?:[?#]|$)/i.test(script.getAttribute("src") || ""));
-    if (!markdownItScript) {
-      throw new Error("The app template does not include the required markdown-it script.");
-    }
-    const exportedMarkdownItScript = markdownItScript.cloneNode(false);
-    // The exported runtime is inline and executes immediately. Removing defer makes the external
-    // library parser-blocking, so window.markdownit exists before main.js initializes rendering.
-    exportedMarkdownItScript.removeAttribute("defer");
-    const widgetDependencyScripts = hasWidgets
-      ? Array.from(document.querySelectorAll("script[src]"))
-        .filter(script => isWidgetDependency(script.getAttribute("src")))
-        .map(script => {
-          const copy = script.cloneNode(false);
-          copy.removeAttribute("defer");
-          return copy;
-        })
-      : [];
-    const widgetDependencyStyles = hasWidgets
-      ? Array.from(document.querySelectorAll("link[rel='stylesheet'][href]"))
-        .filter(link => isWidgetDependency(link.getAttribute("href")))
-        .map(link => link.cloneNode(false))
-      : [];
     documentCopy.querySelectorAll("link[rel='stylesheet'], script").forEach(element => element.remove());
     documentCopy.documentElement.classList.add("single-file-export");
 
-    widgetDependencyStyles.forEach(link => documentCopy.head.append(link));
     const style = documentCopy.createElement("style");
-    style.textContent = `${safeInlineStyle(frameworkCss)}\n${safeInlineStyle(markdownCss)}\n${safeInlineStyle(appCss)}`;
+    style.textContent = [frameworkCss, markdownCss, appCss, widgetDependencyStyle]
+      .filter(Boolean)
+      .map(safeInlineStyle)
+      .join("\n");
     documentCopy.head.append(style);
-    documentCopy.body.append(exportedMarkdownItScript);
-    widgetDependencyScripts.forEach(script => documentCopy.body.append(script));
+    const notices = [
+      `markdown-it 14.1.0\n\n${markdownItLicense}`,
+      `Fabric.js 5.3.0\n\n${fabricLicense}`,
+      ...widgetLicenses.map((license, index) => {
+        const names = ["Chart.js 4.5.1", "Tabulator 6.5.3", "SortableJS 1.15.6"];
+        return `${names[index]}\n\n${license}`;
+      })
+    ]
+      .join("\n\n============================================================\n\n")
+      .replace(/--/g, "- -");
+    documentCopy.head.append(documentCopy.createComment(` Third-party license notices\n\n${notices}\n `));
+
+    for (const source of [markdownItScript, ...widgetDependencyScripts]) {
+      const script = documentCopy.createElement("script");
+      script.textContent = safeInlineScript(source);
+      documentCopy.body.append(script);
+    }
 
     const sources = [
       appScript,
       `window.umedAppContentIndex = ${serializeInlineData(index)};`,
       `window.umedSingleFileExport = true;\n` +
         `window.umedEmbeddedAssets = ${serializeInlineData(assets)};\n` +
+        `window.umedEmbeddedFabricSource = ${serializeInlineData(fabricScript)};\n` +
         `window.umedEmbeddedWhiteboardSource = ${serializeInlineData(whiteboardScript)};\n` +
         `window.umedAppContent = ${serializeInlineData(content)};`,
+      ...runtimeBeforeWidgets,
       ...widgetScripts.values(),
-      ...runtimeScripts
+      ...runtimeAfterWidgets
     ];
     for (const source of sources) {
       const script = documentCopy.createElement("script");

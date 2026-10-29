@@ -16,7 +16,7 @@
   const FRAMEWORK_URL = document.currentScript && document.currentScript.src
     ? new URL("../", document.currentScript.src).href
     : new URL("src/um-agentic-ed-framework/", document.baseURI).href;
-  const FABRIC_URL = "https://cdn.jsdelivr.net/npm/fabric@5.3.0/dist/fabric.min.js";
+  const FABRIC_URL = `${FRAMEWORK_URL}third-party/fabric@5.3.0/fabric.min.js`;
 
   function loadScript(src) {
     return new Promise((resolve, reject) => {
@@ -31,11 +31,30 @@
     });
   }
 
+  function loadEmbeddedScript(source, description) {
+    return new Promise((resolve, reject) => {
+      try {
+        if (typeof source !== "string" || !source) throw new Error(`${description} source is unavailable.`);
+        const script = document.createElement("script");
+        script.textContent = source;
+        document.head.append(script);
+        resolve();
+      } catch (error) {
+        reject(error);
+      }
+    });
+  }
+
   let fabricScriptPromise = null;
   function loadFabricScript() {
     if (window.fabric) return Promise.resolve();
     if (!fabricScriptPromise) {
-      fabricScriptPromise = loadScript(FABRIC_URL).catch(error => {
+      const source = window.umedSingleFileExport ? window.umedEmbeddedFabricSource : null;
+      fabricScriptPromise = (window.umedSingleFileExport
+        ? loadEmbeddedScript(source, "Fabric.js")
+        : loadScript(FABRIC_URL)).then(() => {
+        if (!window.fabric) throw new Error("Fabric.js did not initialize.");
+      }).catch(error => {
         fabricScriptPromise = null;
         throw error;
       });
@@ -70,16 +89,8 @@
     if (typeof source !== "string" || !source) {
       return Promise.reject(new Error("The exported Learner sketchpad component is unavailable."));
     }
-    return new Promise((resolve, reject) => {
-      try {
-        const script = document.createElement("script");
-        script.textContent = source;
-        document.head.append(script);
-        if (!window.umedPresenterWhiteboard) throw new Error("The Learner sketchpad did not initialize.");
-        resolve();
-      } catch (error) {
-        reject(error);
-      }
+    return loadEmbeddedScript(source, "Learner sketchpad").then(() => {
+      if (!window.umedPresenterWhiteboard) throw new Error("The Learner sketchpad did not initialize.");
     });
   }
 

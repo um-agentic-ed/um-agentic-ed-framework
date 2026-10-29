@@ -334,6 +334,13 @@ runtime behavior.
 
 The single-file exporter builds from the Framework-owned shell rather than from
 the Parent entrypoint, so exports remain independent of the launcher's filename.
+Approved third-party libraries are pinned as minified distributions with their
+license notices in versioned Framework `third-party` directories; the Framework
+runtime does not load them from a CDN. Single-file exports inline markdown-it and
+Fabric.js, and also inline Chart.js, Tabulator JavaScript and CSS, and Sortable.js
+when the exported selection contains a widget. Consequently, Framework-supported
+rendering, notes, and sketching work offline without external script or stylesheet
+dependencies. New third-party libraries still require developer approval.
 
 # Editing permissions and locks
 

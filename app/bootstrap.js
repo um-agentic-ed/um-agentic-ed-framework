@@ -216,15 +216,15 @@
     addStyle(new URL("app.css", appRoot).href)
   ]);
   // This stylesheet is only needed when a Tabulator widget is displayed and must not delay the
-  // initial app view when the CDN is slow or unavailable.
-  addStyle("https://cdn.jsdelivr.net/npm/tabulator-tables@6.5.3/dist/css/tabulator.min.css")
+  // initial app view.
+  addStyle(new URL("third-party/tabulator-tables@6.5.3/tabulator.min.css", frameworkRoot).href)
     .catch(error => console.warn(error));
 
   const prerequisitesReady = loadScriptsInOrder([
-    "https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js",
-    "https://cdn.jsdelivr.net/npm/tabulator-tables@6.5.3/dist/js/tabulator.min.js",
-    "https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js",
-    "https://cdn.jsdelivr.net/npm/markdown-it@14.1.0/dist/markdown-it.min.js",
+    new URL("third-party/chart.js@4.5.1/chart.umd.min.js", frameworkRoot).href,
+    new URL("third-party/tabulator-tables@6.5.3/tabulator.min.js", frameworkRoot).href,
+    new URL("third-party/sortablejs@1.15.6/Sortable.min.js", frameworkRoot).href,
+    new URL("third-party/markdown-it@14.1.0/markdown-it.min.js", frameworkRoot).href,
     new URL("app/schema-contract.js", frameworkRoot).href,
     new URL("app.js", appRoot).href,
     new URL("src/content/content-index.js", appRoot).href,
