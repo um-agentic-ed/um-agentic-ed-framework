@@ -18,12 +18,23 @@
     "src/um-agentic-ed-framework/app/main.js"
   ];
 
-  async function readFile(rootHandle, relativePath) {
-    return window.umedEditorFS.readFile(rootHandle, relativePath);
+  async function readFile(rootHandle, relativePath, description = "required file") {
+    try {
+      return await window.umedEditorFS.readFile(rootHandle, relativePath);
+    } catch (error) {
+      const detail = error && error.message ? ` ${error.message}` : "";
+      throw new Error(`Could not read the ${description} at "${relativePath}".${detail}`, { cause: error });
+    }
   }
 
-  async function readText(rootHandle, relativePath) {
-    return (await readFile(rootHandle, relativePath)).text();
+  async function readText(rootHandle, relativePath, description) {
+    try {
+      return await (await readFile(rootHandle, relativePath, description)).text();
+    } catch (error) {
+      if (error && error.message && error.message.includes(`"${relativePath}"`)) throw error;
+      const detail = error && error.message ? ` ${error.message}` : "";
+      throw new Error(`Could not read text from "${relativePath}".${detail}`, { cause: error });
+    }
   }
 
   function contentPaths(index) {
@@ -173,11 +184,29 @@
     return (Array.isArray(block.images) ? block.images : [])
       .filter(image => image && image.url && image.source !== "url")
       .map(image => {
+        // app-overview.js lives directly in src/content; every other Slide or landing Slide has
+        // a route-key folder that also serves as its local asset folder.
         const basePath = image.source === "shared"
           ? "src/content/assets/images"
-          : `src/content/${contentKey}`;
+          : contentKey === "app-overview" ? "src/content" : `src/content/${contentKey}`;
         return `${basePath}/${image.url}`;
       });
+  }
+
+  function showWorkingDialog() {
+    const overlay = document.createElement("div");
+    overlay.className = "editor-busy-overlay";
+    overlay.setAttribute("role", "status");
+    overlay.setAttribute("aria-live", "polite");
+
+    const indicator = document.createElement("span");
+    indicator.className = "editor-busy-spinner";
+    indicator.setAttribute("aria-hidden", "true");
+    const label = document.createElement("span");
+    label.textContent = "Working\u2026";
+    overlay.append(indicator, label);
+    document.body.append(overlay);
+    return () => overlay.remove();
   }
 
   function fileToDataUrl(file) {
@@ -286,7 +315,7 @@
     let hasWidgets = false;
 
     for (const [key, path] of contentPaths(index)) {
-      const scriptText = await readText(rootHandle, path);
+      const scriptText = await readText(rootHandle, path, `content script for "${key}"`);
       const data = readRegisteredContent(scriptText, key);
       const validation = schemaContract.validateSlide(data, {
         kind: path.endsWith("/slide.js") ? "slide" : "overview",
@@ -299,7 +328,9 @@
         if (block.type === "image") {
           for (const imagePath of imagePathsForBlock(block, key)) {
             if (assets[imagePath]) continue;
-            assets[imagePath] = await optimizedImageDataUrl(await readFile(rootHandle, imagePath));
+            assets[imagePath] = await optimizedImageDataUrl(
+              await readFile(rootHandle, imagePath, `image used by "${key}"`)
+            );
           }
         } else if (block.type === "widget" && block.name) {
           hasWidgets = true;
@@ -394,9 +425,14 @@
       if (!selection) return;
       const rootHandle = await window.umedEditorFS.getAppRootHandle();
       if (!rootHandle) return;
-      const html = await buildHtml(rootHandle, selection);
-      const appName = (window.umedAppIdentity && window.umedAppIdentity.appName) || "app";
-      downloadHtml(html, `${appName}-single-file.html`);
+      const dismissWorkingDialog = showWorkingDialog();
+      try {
+        const html = await buildHtml(rootHandle, selection);
+        const appName = (window.umedAppIdentity && window.umedAppIdentity.appName) || "app";
+        downloadHtml(html, `${appName}-single-file.html`);
+      } finally {
+        dismissWorkingDialog();
+      }
     } catch (error) {
       console.error(error);
       window.alert(`The app could not be exported: ${error.message}`);
