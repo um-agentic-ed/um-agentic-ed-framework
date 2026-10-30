@@ -20,28 +20,33 @@
 .green { color: #2f855a; }
 .blue { color: #005a9c; }
 .purple { color: #7a3e9d; }
+.brown { color: #8b4513; }
 .red-bold { color: #b3261e; font-weight: 600; }
 .orange-bold { color: #f97316; font-weight: 600; }
 .yellow-bold { color: #dda80a; font-weight: 600; }
 .green-bold { color: #2f855a; font-weight: 600; }
 .blue-bold { color: #005a9c; font-weight: 600; }
 .purple-bold { color: #7a3e9d; font-weight: 600; }
+.brown-bold { color: #8b4513; font-weight: 600; }
 .red-large { color: #b3261e; font-size: 120%; }
 .orange-large { color: #f97316; font-size: 120%; }
 .yellow-large { color: #dda80a; font-size: 120%; }
 .green-large { color: #2f855a; font-size: 120%; }
 .blue-large { color: #005a9c; font-size: 120%; }
 .purple-large { color: #7a3e9d; font-size: 120%; }
+.brown-large { color: #8b4513; font-size: 120%; }
 .red-large-bold { color: #b3261e; font-size: 120%; font-weight: 600; }
 .orange-large-bold { color: #f97316; font-size: 120%; font-weight: 600; }
 .yellow-large-bold { color: #dda80a; font-size: 120%; font-weight: 600; }
 .green-large-bold { color: #2f855a; font-size: 120%; font-weight: 600; }
 .blue-large-bold { color: #005a9c; font-size: 120%; font-weight: 600; }
 .purple-large-bold { color: #7a3e9d; font-size: 120%; font-weight: 600; }
+.brown-large-bold { color: #8b4513; font-size: 120%; font-weight: 600; }
 .red-bold-large { color: #b3261e; font-weight: 600; font-size: 120%; }
 .orange-bold-large { color: #f97316; font-weight: 600; font-size: 120%; }
 .yellow-bold-large { color: #dda80a; font-weight: 600; font-size: 120%; }
 .green-bold-large { color: #2f855a; font-weight: 600; font-size: 120%; }
 .blue-bold-large { color: #005a9c; font-weight: 600; font-size: 120%; }
 .purple-bold-large { color: #7a3e9d; font-weight: 600; font-size: 120%; }
+.brown-bold-large { color: #8b4513; font-weight: 600; font-size: 120%; }
 .nbsp { color: transparent; font-family: monospace, monospace; font-size: 120%; }
