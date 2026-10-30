@@ -726,53 +726,61 @@ document type and refuses to overwrite an incompatible document.
 
 # Educational content generation guidelines
 
+The precedence order for resolving conflicting content generation instructions is:
+1. The Editor's specific content generation brief (highest precedence).
+2. Any app instructions fields in relevant slide blocks.
+3. Section `# Educational content generation guidelines` in the Parent 
+   `../../AGENTS.md` file.
+4. Any Framework skill file invoked in the brief, e.g., `generate-content.md`.
+5. This section of this `AGENTS.md` file (lowest precedence).
+All of the above should be followed unless a higher-precedence instruction 
+overrides a lower one.
+
 Agent-generated content must be drawn from high-quality information sources:
 - Information should be verifiable.
 - When newer, less well verified information is presented, external links to 
-  publications or other peer reviewed content should be provided.
-- Category- and Section-tree-level `_trusted_sources` folders allow Editors to provide
-  context files that:
+  publications or other peer-reviewed content should be provided.
+- Category- and Section-tree-level `_trusted_sources` folders allow Editors to 
+  provide context files that:
   - Are trusted and allowed as information sources.
   - Should be prioritized when generating content, but should not be considered
-    as exclusive context and can be supported by other content as outlined above.
+    as exclusive context and can be supported by other verifiable content.
   - Are not pushed to servers with the repository due to settings in `.gitignore`.
   - Apply throughout their declared scope: Category sources may be used by all
     child Sections, while Section sources apply only to that Section. Agents
     working on a Section or Slide use applicable Category sources plus sources
-    from that Slide's own Section, never sources from a sister Section.
-- Additional App-specific content guidance is provide by `../../AGENTS.md`, the 
-  specific content generation prompt, and any applicable `instructions` blocks.
+    from that Slide's own Section.
 
-When generating content for a Section, you should:
+When generating content for a Category or Section, you should:
+- Follow Category and Section instructions regarding their content scope and 
+  adjust Slide count and length accordingly.
 - Order Slides to naturally build in difficulty within and across Slide Levels.
-- Break Slides into Levels at natural transitions when there are more than ten
-  Slides in a Level.
-    - It is not required to use all Levels for every Section of Slides.
-- Add Question blocks at natural transition points:
-  - Questions might appear every few Slides, added as a Question block on an
-    existing Slide (usually at the bottom) or a Slide dedicated to one or more 
-    Questions.
-  - Do not add a Question with every slide.
-  - Do not go more than five slides without a Question.
-  - Use multiple choice format.
-  - Immediately evaluate answers with feedback below the Question on why they 
-    are correct or incorrect.
-- Use GPT follow-up prompt suggestions (block type `gptFollowup`) to help avoid 
-  creating bloated, overly-long Slides. 
-  - To promote interactive learning, seek a balance between:
-    - Providing educational content on Slides in the app; Slides should always
-      be fully understandable as an educational unit on their own.
-    - Providing guidance on ways to explore that content via GPT chat.
+- Break Slides into Levels when content can be identified as basic, intermediate,
+  or advanced; it is not required to use all Levels for every Section of Slides.
+- Use GPT follow-up prompt suggestions (block type `gptFollowup`) to avoid 
+  bloated, overly-long Slides. 
+  - Seek a balance between:
+    - Providing educational content on Slides in the app; Slides should be 
+      understandable as an educational unit on their own.
+    - Providing guidance on ways to explore that content via GPT chat; active
+      learning is a goal of system.
   - GPT follow-up prompt suggestions are not a required Slide block, but many 
-    Slides are expected to benefit from one to three suggestions. Never have more 
-    than five suggestions.
-  - Keep suggestions short, typically one concise sentence or line of text. The
-    suggested follow-up prompt will appear in generated prompt text after a 
-    standard GPT app context and the Slide text, so follow-up suggestions only 
-    need to provide a specific additional exploration of a Slide-related topic.
-  - Suggestions should remain topical to the Slide and not go off on unrelated 
-    tangents. Appropriate suggestions might explore content the Slide omitted for 
-    brevity, more advanced considerations, nuances or tricky exceptions, etc. 
+    Slides are expected to benefit from one or two suggestions. 
+  - Keep suggestions short, typically one sentence. The suggested follow-up prompt 
+    will appear in generated prompt text after a standard GPT app context and the 
+    Slide text, so follow-up suggestions only need to provide a specific additional exploration of a Slide-related topic.
+  - Suggestions should remain topical to the Slide and not go on tangents. 
+    Appropriate suggestions might explore content the Slide omitted for brevity, 
+    in-depth exploration, advanced considerations, nuances, tricky exceptions, etc. 
+- Use Question blocks (block type `question`) when they enhance learning beyond 
+  factual presentation and/or to emphasize especially important points.
+  - Questions are not a required Slide block.
+  - Questions are used less frequently than GPT follow-up suggestions.
+  - Do not put more than one Question on a Slide.
+  - As a self-help/emphasis mechanism, Questions usually appear toward the bottom
+    of Slides.
+- Not create Widgets unless the brief or retained instructions specifically 
+  request one.
 
 ## Image content blocks
 - Agents may generate new image content as well as text.
@@ -788,7 +796,8 @@ When generating content for a Section, you should:
     block dedicated to source attribution. Editors are responsible for doing the
     same when they add public image URLs in Editor Mode.
   - Prefer generated over linked images to minimize copyright issues, but do
-    not attempt to recreate highly complex renderings.
+    not attempt to recreate complex renderings; Editors will make final decisions
+    whether to accept linked artwork.
 
 # Widget file generation
 

@@ -151,9 +151,7 @@ entries as required below before reading them or generating content.
    write validated downloads to applicable Category or Section
    `_trusted_sources` folders and update only the matching entries' `file`
    fields in those landing files. It must not alter other landing-slide content.
-   Change a Section-local `AGENTS.md` only when explicitly requested. Do not
-   create or regenerate widget JavaScript merely because a widget block is
-   authored; use `create-widget` for that task.
+   Change a Section-local `AGENTS.md` only when explicitly requested. 
 10. **Validate the result.** Check changed JavaScript syntax; confirm disk/index
    correspondence, schema versions, UUID uniqueness, folder and registration
    keys, Levels, and ordering; ensure removed Slides are absent from both disk
