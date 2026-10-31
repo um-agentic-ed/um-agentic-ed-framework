@@ -2570,7 +2570,7 @@
 
   function getMarkdownRenderer() {
     if (markdownRenderer || typeof window.markdownit !== "function") return markdownRenderer;
-    const renderer = window.markdownit({ html: false, linkify: true, breaks: true, typographer: false });
+    const renderer = window.markdownit({ html: false, linkify: true, breaks: true, typographer: true });
     if (typeof window.markdownitSup === "function") renderer.use(window.markdownitSup);
     if (typeof window.markdownitSub === "function") renderer.use(window.markdownitSub);
     renderer.use(textClassPlugin);
@@ -2580,12 +2580,33 @@
     const defaultLinkOpen = renderer.renderer.rules.link_open
       || ((tokens, index, options, env, self) => self.renderToken(tokens, index, options));
     renderer.renderer.rules.link_open = (tokens, index, options, env, self) => {
-      tokens[index].attrSet("target", "umed-external");
-      tokens[index].attrSet("rel", "noopener noreferrer");
+      let href = tokens[index].attrGet("href") || "";
+      if (isExternalUrl(href)) {
+        tokens[index].attrSet("target", "umed-external");
+        tokens[index].attrSet("rel", "noopener noreferrer");
+      }
       return defaultLinkOpen(tokens, index, options, env, self);
     };
     markdownRenderer = renderer;
     return markdownRenderer;
+  }
+  function isExternalUrl(href) {
+    if (!href || href.startsWith("/") || href.startsWith("#") || href.startsWith("./") || href.startsWith("../")) {
+      return false;
+    }
+    if (href.startsWith("http://") || href.startsWith("https://") || href.startsWith("//")) {
+      const currentHost = typeof window !== "undefined" ? window.location.hostname : "";
+      if (currentHost) {
+        try {
+          const url = new URL(href, window.location.href);
+          return url.hostname !== currentHost;
+        } catch {
+          return false;
+        }
+      }
+      return true;
+    }
+    return false;
   }
 
   function escapeHtml(text) {

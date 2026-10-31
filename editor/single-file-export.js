@@ -462,7 +462,7 @@
       try {
         const html = await buildHtml(rootHandle, selection);
         const appName = (window.umedAppIdentity && window.umedAppIdentity.appName) || "app";
-        downloadHtml(html, `${appName}-single-file.html`);
+        downloadHtml(html, `${appName}.html`);
       } finally {
         dismissWorkingDialog();
       }
