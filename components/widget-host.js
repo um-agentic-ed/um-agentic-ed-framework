@@ -5,8 +5,8 @@
   // = { init(container) { ...; return destroy; } }. See AGENTS.md "Widget content blocks" for the contract.
   window.umedAppWidgets = window.umedAppWidgets || {};
 
-  const loadedScripts = new Set(); // widget.js src values already appended to <head>, so returning to
-                                    // a Slide doesn't re-fetch/re-execute its widget script.
+  const loadedScripts = new Map(); // widget.js src values and registry keys already appended to
+                                   // <head>, so returning to a Slide doesn't re-fetch/re-execute it.
   let activeWidgets = []; // destroy callbacks for every widget currently mounted in the visible Slide.
   let reloadToken = "";
 
@@ -54,7 +54,7 @@
     }
     const script = document.createElement("script");
     script.src = reloadToken ? `${src}?reload=${reloadToken}` : src;
-    script.onload = () => { loadedScripts.add(src); start(); };
+    script.onload = () => { loadedScripts.set(src, key); start(); };
     script.onerror = () => showPlaceholder(container, `Widget "${name}" has not been generated yet.`);
     document.head.append(script);
   }
@@ -69,10 +69,11 @@
   }
 
   // Forget loaded widget scripts and use a new cache-busting token after an Editor refresh.
-  function invalidateScripts() {
+  function invalidateScripts(token = Date.now().toString()) {
     destroyAll();
+    loadedScripts.forEach(key => { delete window.umedAppWidgets[key]; });
     loadedScripts.clear();
-    reloadToken = Date.now().toString();
+    reloadToken = token;
   }
 
   window.umedWidgetHost = { mount, destroyAll, invalidateScripts };

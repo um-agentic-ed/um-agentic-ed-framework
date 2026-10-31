@@ -2824,10 +2824,10 @@
   elements.editorRefresh.innerHTML = (window.umedIcons && window.umedIcons.refresh) || "\u21bb";
   if (elements.appExport) elements.appExport.innerHTML = (window.umedIcons && window.umedIcons.export) || "\u2193";
 
-  function reloadContentIndex() {
+  function reloadContentIndex(reloadToken) {
     return new Promise((resolve, reject) => {
       const script = document.createElement("script");
-      script.src = `${CONTENT_ROOT}/content-index.js?reload=${Date.now()}`;
+      script.src = `${CONTENT_ROOT}/content-index.js?reload=${reloadToken}`;
       script.onload = () => {
         script.remove();
         const refreshedIndex = window.umedAppContentIndex;
@@ -2850,15 +2850,38 @@
     });
   }
 
+  function reloadStylesheets(reloadToken) {
+    const replacements = Array.from(document.querySelectorAll('link[rel~="stylesheet"]')).map(current => {
+      const replacement = current.cloneNode(false);
+      const url = new URL(current.href, window.location.href);
+      url.searchParams.set("reload", reloadToken);
+      replacement.href = url.href;
+      return { current, replacement };
+    });
+
+    return Promise.all(replacements.map(({ replacement }) => new Promise((resolve, reject) => {
+      replacement.onload = resolve;
+      replacement.onerror = () => reject(new Error(`Could not reload ${replacement.href}.`));
+      document.head.append(replacement);
+    }))).then(() => {
+      replacements.forEach(({ current }) => current.remove());
+    }).catch(error => {
+      replacements.forEach(({ replacement }) => replacement.remove());
+      throw error;
+    });
+  }
+
   async function refreshContentFromDisk() {
     elements.editorRefresh.disabled = true;
     try {
-      await reloadContentIndex();
-      contentReloadToken = Date.now().toString();
+      const reloadToken = Date.now().toString();
+      await Promise.all([reloadContentIndex(reloadToken), reloadStylesheets(reloadToken)]);
+      contentReloadToken = reloadToken;
       if (window.umedWidgetHost && typeof window.umedWidgetHost.invalidateScripts === "function") {
-        window.umedWidgetHost.invalidateScripts();
+        window.umedWidgetHost.invalidateScripts(reloadToken);
       }
-      if (currentInfo && currentInfo.key) delete contentStore[currentInfo.key];
+      Object.keys(contentStore).forEach(key => { delete contentStore[key]; });
+      contentLoadPromises.clear();
       rebuildSearchIndex();
       resolveRoute();
     } catch (error) {
