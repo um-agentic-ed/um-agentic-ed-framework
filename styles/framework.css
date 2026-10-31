@@ -35,6 +35,8 @@
   --umed-brand-hover-bg: #173f5f;
   --umed-brand-border: #4c5837;
   --umed-brand-accent: #00274c;
+  --umed-slide-link: #005a9c;
+  --umed-slide-link-hover: #8b2a24;
 }
 
 * { box-sizing: border-box; }
@@ -44,6 +46,16 @@ html, body { height: 100%; overflow: hidden; }
 body { margin: 0; }
 button, input { font: inherit; }
 button { cursor: pointer; }
+
+/* Keep followed links blue. */
+.slide-content a:link,
+.slide-content a:visited {
+  color: var(--umed-slide-link);
+}
+.slide-content a:hover,
+.slide-content a:focus-visible {
+  color: var(--umed-slide-link-hover);
+}
 
 /* ==========================================================================
    2. App header
