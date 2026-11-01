@@ -259,6 +259,7 @@ the App's identity or branding:
     - widget JavaScript source, internal identifiers, and data/code values
     - Subject, Category, and Section landing slides
     - GPT follow-up prompts
+    - switchboard blocks
 - Keyword generators must include only keywords of at least three characters and omit
   trivial, low-complexity words such as articles and prepositions. Indexed keywords 
   should closely match the output of in-app keyword generation as executed by
@@ -612,6 +613,19 @@ type-specific fields:
   - Exactly one choice should have `correct: true`.
   - Answer feedback below the question is a fixed behavior of the shared
     Question component and is not configurable per-block.
+- `switchboard` block: a table found only on app overview slides with columns
+  "App" and "Description" of grouped sister apps to the current app with links
+  to load them and fields:
+  - `markdown`, preamble text before the table
+  - `appListUrl`, a valid URL to an app list JSON file used to render the table,
+    which returns an array of app groups `[{"groupName": "", "apps": []}, ...]`,
+    where each app in a group is
+    `{"repository": "", "label": "", "description": "", "public": bool}`
+  - Each group renders as a bold, full-width row followed by its App rows. The
+    current App (matched by `appName` and `repository`) is omitted. On `file:`
+    URLs all remaining Apps are shown; on served pages only Apps whose `public`
+    field is `true` are shown. Empty groups are omitted. If every group is empty,
+    the complete Block, including its preamble, is omitted.
 
 # Content index file format and behavior
 

@@ -1738,7 +1738,11 @@
       heading.textContent = data.title;
       elements.slide.append(heading);
       for (const block of (data.content && data.content.blocks) || []) {
-        if (block.type !== "trustedSources") renderBlock(block, elements.slide, assetBasePath);
+        if (block.type === "switchboard") {
+          if (key === "app-overview") renderSwitchboardBlock(block, elements.slide);
+        } else if (block.type !== "trustedSources") {
+          renderBlock(block, elements.slide, assetBasePath);
+        }
       }
       if (navigationTarget && navigationTarget.kind === "category") {
         renderTrustedSources(data.content.blocks || [], elements.slide, "category");
@@ -2506,6 +2510,101 @@
     div.className = "block-lead-markdown";
     div.innerHTML = renderMarkdown(block.markdown);
     parent.append(div);
+  }
+
+  // App switchboards are deliberately limited to the App overview. The preamble and table are
+  // committed to the DOM together only after fetching, validating, and filtering the list, so an
+  // empty or unavailable list does not leave an orphaned introduction on the Slide.
+  async function renderSwitchboardBlock(block, parent) {
+    const appListUrl = String(block.appListUrl || "").trim();
+    if (!appListUrl) return;
+    let resolvedUrl;
+    try {
+      resolvedUrl = new URL(appListUrl, window.location.href);
+      if (!["file:", "http:", "https:"].includes(resolvedUrl.protocol)) return;
+    } catch (error) {
+      return;
+    }
+
+    // This visually empty marker retains the Block's position and becomes disconnected whenever
+    // the Slide redraws, which prevents an older asynchronous request from painting stale data.
+    const marker = document.createElement("span");
+    marker.hidden = true;
+    parent.append(marker);
+
+    let groups;
+    try {
+      const response = await fetch(resolvedUrl.href);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      groups = await response.json();
+    } catch (error) {
+      console.warn(`Switchboard app list could not be loaded from "${appListUrl}".`, error);
+      marker.remove();
+      return;
+    }
+    if (!marker.isConnected || !Array.isArray(groups)) {
+      marker.remove();
+      return;
+    }
+
+    const currentRepository = String(identity.appName || "").trim();
+    const showPrivateApps = window.location.protocol === "file:";
+    const repositoryPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+    const visibleGroups = groups.flatMap(group => {
+      if (!group || typeof group.groupName !== "string" || !Array.isArray(group.apps)) return [];
+      const apps = group.apps.filter(app => app
+        && typeof app.repository === "string"
+        && repositoryPattern.test(app.repository)
+        && typeof app.label === "string"
+        && typeof app.description === "string"
+        && app.repository !== currentRepository
+        && (showPrivateApps || app.public === true));
+      return apps.length ? [{ groupName: group.groupName, apps }] : [];
+    });
+    if (!visibleGroups.length) {
+      marker.remove();
+      return;
+    }
+
+    const wrapper = document.createElement("div");
+    wrapper.className = "switchboard-block";
+    renderBlockMarkdown(block, wrapper);
+    const table = document.createElement("table");
+    const head = document.createElement("thead");
+    const headerRow = document.createElement("tr");
+    ["App", "Description"].forEach(label => {
+      const cell = document.createElement("th");
+      cell.scope = "col";
+      cell.textContent = label;
+      headerRow.append(cell);
+    });
+    head.append(headerRow);
+    const body = document.createElement("tbody");
+    visibleGroups.forEach(group => {
+      const groupRow = document.createElement("tr");
+      groupRow.className = "switchboard-group-row";
+      const groupCell = document.createElement("th");
+      groupCell.colSpan = 2;
+      groupCell.scope = "rowgroup";
+      groupCell.textContent = group.groupName;
+      groupRow.append(groupCell);
+      body.append(groupRow);
+      group.apps.forEach(app => {
+        const row = document.createElement("tr");
+        const appCell = document.createElement("td");
+        const link = document.createElement("a");
+        link.href = `../${app.repository}`;
+        link.textContent = app.label;
+        appCell.append(link);
+        const descriptionCell = document.createElement("td");
+        descriptionCell.textContent = app.description;
+        row.append(appCell, descriptionCell);
+        body.append(row);
+      });
+    });
+    table.append(head, body);
+    wrapper.append(table);
+    marker.replaceWith(wrapper);
   }
 
   // Space/comma-delimited extensions (see AGENTS.md dataFile block) become a <input accept> list.

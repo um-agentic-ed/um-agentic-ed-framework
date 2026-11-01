@@ -490,6 +490,15 @@ body.presenter-mode .slide-content .gpt-followups h2 { font-size: 1.1em; }
   border: 1px solid #9ba7b1;
 }
 .slide-content .text-block th, .slide-content .block-lead-markdown th, .question-prompt th { background: #f1f2f3; }
+.slide-content .switchboard-block { margin: 0 0 1.25rem; }
+.slide-content .switchboard-block table { width: 100%; border-collapse: collapse; }
+.slide-content .switchboard-block th, .slide-content .switchboard-block td {
+  padding: .35rem .7rem;
+  border: 1px solid #9ba7b1;
+  text-align: left;
+  vertical-align: top;
+}
+.slide-content .switchboard-block thead th { background: #f1f2f3; }
 .slide-content .text-block blockquote, .slide-content .block-lead-markdown blockquote {
   margin: 0 0 1rem;
   padding: .1rem 1rem;

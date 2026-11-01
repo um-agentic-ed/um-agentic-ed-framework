@@ -2,7 +2,7 @@
   "use strict";
 
   const INCLUDED_BLOCK_TYPES = new Set([
-    "text", "image", "widget", "link", "dataFile", "question", "divider", "gptFollowup"
+    "text", "image", "widget", "link", "dataFile", "question", "divider", "gptFollowup", "switchboard"
   ]);
   // The Learner/Presenter content panel is capped at 1100 CSS pixels. Retaining twice that width
   // keeps a full-width image sharp on a 2x-density display without embedding unused source pixels.

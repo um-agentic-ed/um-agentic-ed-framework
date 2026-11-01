@@ -160,6 +160,9 @@
   function isCategoryLanding() {
     return Boolean(current && current.kind === "overview" && current.key.split("/").length === 2);
   }
+  function isAppOverview() {
+    return Boolean(current && current.kind === "overview" && current.key === "app-overview");
+  }
   function isContentGenerationLanding() {
     return isCategoryLanding() || isSectionLanding();
   }
@@ -1594,6 +1597,15 @@
       url.value = block.url || "";
       url.addEventListener("input", () => { block.url = url.value; scheduleRefresh(); });
       fieldset.append(field("Link URL", url));
+    } else if (block.type === "switchboard" && isAppOverview()) {
+      fieldset.append(buildMarkdownField(block));
+
+      const appListUrl = document.createElement("input");
+      appListUrl.type = "url";
+      appListUrl.value = block.appListUrl || "";
+      appListUrl.placeholder = "valid URL to a app list JSON file";
+      appListUrl.addEventListener("input", () => { block.appListUrl = appListUrl.value; scheduleRefresh(); });
+      fieldset.append(field("App list URL", appListUrl));
     } else if (block.type === "question") {
       buildQuestionBlockFields(block, fieldset, rerender);
     } else if (block.type === "gptFollowup") {
@@ -1684,6 +1696,7 @@
         ["Data File", () => ({ type: "dataFile", markdown: "", name: "", extensions: "", prompt: "" })]
       ],
       [
+        ["Switchboard", () => ({ type: "switchboard", markdown: "", appListUrl: "" })],
         ["Instructions", () => ({ type: "instructions", instructions: "" })],
         ["Trusted Sources", () => ({ type: "trustedSources", files: [] })],
         ["Widget", () => ({ type: "widget", markdown: "", name: "", maxWidth: "", center: false, instructions: "" })],
@@ -1703,6 +1716,7 @@
       const column = document.createElement("div");
       column.className = "editor-add-menu-column";
       items.filter(([label]) => {
+        if (label === "Switchboard") return isAppOverview();
         if (label === "Instructions") return isContentGenerationLanding() || isSlide();
         if (label === "Trusted Sources") return isContentGenerationLanding();
         if (["Widget", "Question", "GPT Follow-up Prompts"].includes(label)) return isSlide();
