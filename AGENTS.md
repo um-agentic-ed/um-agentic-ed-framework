@@ -622,7 +622,8 @@ type-specific fields:
     where each app in a group is
     `{"repository": "", "label": "", "description": "", "public": bool}`
   - Each group renders as a bold, full-width row followed by its App rows. The
-    current App (matched by `appName` and `repository`) is omitted. On `file:`
+    App link URL is `../<repository>/index.html`.
+    The current App (matched by `appName` and `repository`) is omitted. On `file:`
     URLs all remaining Apps are shown; on served pages only Apps whose `public`
     field is `true` are shown. Empty groups are omitted. If every group is empty,
     the complete Block, including its preamble, is omitted.

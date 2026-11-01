@@ -2593,7 +2593,7 @@
         const row = document.createElement("tr");
         const appCell = document.createElement("td");
         const link = document.createElement("a");
-        link.href = `../${app.repository}`;
+        link.href = `../${app.repository}/index.html`;
         link.textContent = app.label;
         appCell.append(link);
         const descriptionCell = document.createElement("td");
