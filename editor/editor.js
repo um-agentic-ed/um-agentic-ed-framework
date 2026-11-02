@@ -1603,7 +1603,7 @@
       const appListUrl = document.createElement("input");
       appListUrl.type = "url";
       appListUrl.value = block.appListUrl || "";
-      appListUrl.placeholder = "valid URL to a app list JSON file";
+      appListUrl.placeholder = "valid URL to an app list JSON file";
       appListUrl.addEventListener("input", () => { block.appListUrl = appListUrl.value; scheduleRefresh(); });
       fieldset.append(field("App list URL", appListUrl));
     } else if (block.type === "question") {
