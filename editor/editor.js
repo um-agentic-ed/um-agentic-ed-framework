@@ -89,8 +89,73 @@
   function updateSaveButtonState() {
     if (!current) return;
     const isDirty = dirtyKeys.has(current.key);
-    if (currentSaveButton) currentSaveButton.disabled = !isDirty;
+    const otherCount = pendingSlideInfos().filter(candidate => candidate.key !== current.key).length;
+    if (currentSaveButton) {
+      currentSaveButton.disabled = !isDirty && !otherCount;
+      currentSaveButton.classList.toggle("save-button-other", !isDirty && otherCount > 0);
+      currentSaveButton.title = isDirty
+        ? (otherCount ? `Save this Slide or all ${otherCount + 1} Slides with pending changes` : "Save pending changes")
+        : (otherCount ? `This Slide is up to date; ${otherCount} other Slide${otherCount === 1 ? " has" : "s have"} pending changes` : "No pending changes");
+    }
     if (currentDiscardButton) currentDiscardButton.disabled = !isDirty;
+  }
+
+  function pendingSlideInfos() {
+    return [...dirtyKeys]
+      .map(key => contentInfoByKey.get(key))
+      .filter(candidate => candidate && (candidate.kind === "slide" || candidate.kind === "overview"));
+  }
+
+  // Resolves to "current", "all", or null (cancelled).
+  function promptSaveScope(currentIsDirty, count) {
+    const dialog = document.createElement("dialog");
+    dialog.className = "confirm-dialog";
+    const message = document.createElement("p");
+    message.className = "confirm-dialog-message";
+    message.textContent = currentIsDirty
+      ? `This Slide and ${count - 1} other Slide${count === 2 ? " have" : "s have"} pending changes.`
+      : `This Slide is up to date. ${count} other Slide${count === 1 ? " has" : "s have"} pending changes.`;
+    const actions = document.createElement("div");
+    actions.className = "confirm-dialog-actions";
+    const makeButton = (label, value, confirm) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = label;
+      if (confirm) button.className = "confirm-dialog-confirm";
+      button.dataset.value = value;
+      return button;
+    };
+    const cancel = makeButton("Cancel", "");
+    const buttons = currentIsDirty
+      ? [cancel, makeButton("Save This Slide Only", "current"), makeButton(`Save All ${count} Slides`, "all", true)]
+      : [cancel, makeButton(`Save ${count} Other Slide${count === 1 ? "" : "s"}`, "all", true)];
+    actions.append(...buttons);
+    dialog.append(message, actions);
+    document.body.append(dialog);
+    return new Promise(resolve => {
+      let completed = false;
+      const finish = value => {
+        if (completed) return;
+        completed = true;
+        if (dialog.open) dialog.close();
+        dialog.remove();
+        resolve(value || null);
+      };
+      buttons.forEach(button => button.addEventListener("click", () => finish(button.dataset.value)));
+      dialog.addEventListener("cancel", event => { event.preventDefault(); finish(null); });
+      dialog.addEventListener("close", () => finish(null));
+      dialog.showModal();
+    });
+  }
+
+  async function handleSaveClick(info, button) {
+    const pending = pendingSlideInfos();
+    const currentIsDirty = dirtyKeys.has(info.key);
+    const others = pending.filter(candidate => candidate.key !== info.key);
+    if (currentIsDirty && !others.length) return handleSave(info, button, false);
+    if (!currentIsDirty && !others.length) return;
+    const scope = await promptSaveScope(currentIsDirty, currentIsDirty ? others.length + 1 : others.length);
+    if (scope) await handleSave(info, button, scope === "all");
   }
 
   function markDirty() {
@@ -2019,11 +2084,10 @@
     saveButton.type = "button";
     saveButton.className = "save-button";
     saveButton.textContent = "Save Changes";
-    saveButton.title = "Ctrl-click (Cmd-click on Mac) to save pending changes on all Slides";
-    saveButton.disabled = !dirtyKeys.has(info.key);
-    saveButton.addEventListener("click", event => runEditorAction(() => handleSave(info, saveButton, event.ctrlKey || event.metaKey)));
+    saveButton.addEventListener("click", () => runEditorAction(() => handleSaveClick(info, saveButton)));
     toolbar.append(saveButton);
     currentSaveButton = saveButton;
+    updateSaveButtonState();
 
     pane.append(toolbar);
 
@@ -2385,11 +2449,7 @@
 
   async function handleSave(info, button, saveAllSlides = false) {
     if (!window.umedEditorFS) return;
-    const infos = saveAllSlides
-      ? [...dirtyKeys]
-        .map(key => contentInfoByKey.get(key))
-        .filter(candidate => candidate && (candidate.kind === "slide" || candidate.kind === "overview"))
-      : [info];
+    const infos = saveAllSlides ? pendingSlideInfos() : [info];
     if (!infos.length) return;
 
     const originalLabel = button.textContent;

@@ -836,6 +836,7 @@ body.presenter-mode .slide-content table {
   border-color: var(--accent-active);
   cursor: pointer;
 }
+.save-button:not(:disabled).save-button-other { background: #2b6cb0; border-color: #2b6cb0; }
 .save-button:not(:disabled):hover { filter: brightness(1.08); }
 .editor-form { display: flex; flex-direction: column; gap: 1rem; }
 .editor-field { display: flex; flex-direction: column; gap: .3rem; font-size: .9rem; font-weight: 600; }
