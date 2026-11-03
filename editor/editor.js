@@ -1975,17 +1975,17 @@
     if (deleteKind === "subject") {
       deleteButton.textContent = "Delete Subject";
       const subject = findSubjectEntry(info.key);
-      deleteButton.disabled = !subject || (subject.categories || []).length > 0;
+      deleteButton.disabled = !subject;
     } else if (deleteKind === "category") {
       deleteButton.textContent = "Delete Category";
       const [subjectId, categoryId] = info.key.split("/");
       const category = findCategoryEntry(subjectId, categoryId);
-      deleteButton.disabled = !category || (category.sections || []).length > 0;
+      deleteButton.disabled = !category;
     } else if (deleteKind === "section") {
       deleteButton.textContent = "Delete Section";
       const [subjectId, categoryId, sectionId] = info.key.split("/");
       const section = findSectionEntry(subjectId, categoryId, sectionId);
-      deleteButton.disabled = !section || (section.slides || []).length > 0;
+      deleteButton.disabled = !section;
     } else if (deleteKind === "slide") {
       deleteButton.textContent = "Delete Slide";
     } else {
@@ -2823,8 +2823,8 @@
   // Slides are always deletable. A Subject/Category/Section landing Slide is only classified as a
   // deletable kind here if it actually matches an index entry; the app landing and error Slides
   // are also "overview"-kind but fall through to null and keep the Delete button disabled, so the
-  // App itself can never be deleted. Whether the button is actually enabled (i.e. the Subject,
-  // Category or Section is empty) is decided separately in buildForm.
+  // App itself can never be deleted. Non-empty Subjects, Categories and Sections are deletable
+  // too; handleDelete shows an extra caution in that case.
   function resolveDeleteKind(info) {
     if (info.kind === "slide") return "slide";
     if (info.kind !== "overview") return null;
@@ -2863,11 +2863,17 @@
     if (!deleteKind || !window.umedEditorFS) return;
     const data = window.umedAppContent[info.key];
     const nounLabel = { subject: "Subject", category: "Category", section: "Section" }[deleteKind] || "Slide";
+    const [subjectKey, categoryKey, sectionKey] = info.key.split("/");
+    const entry = deleteKind === "subject" ? findSubjectEntry(subjectKey)
+      : deleteKind === "category" ? findCategoryEntry(subjectKey, categoryKey)
+      : deleteKind === "section" ? findSectionEntry(subjectKey, categoryKey, sectionKey)
+      : null;
+    const hasChildren = !!entry && (entry.categories || entry.sections || entry.slides || []).length > 0;
+    const message = hasChildren
+      ? `Delete the entire ${nounLabel}?\n\n!!! CAUTION !!!\n\nThis action will delete ALL child elements in the ${nounLabel}. All slides in the ${nounLabel} will be deleted!\n\nThis action is permanent and cannot be undone.`
+      : `Delete ${nounLabel} "${data ? data.title : info.key}"? This permanently removes its folder from disk and cannot be undone.`;
     const confirmed = window.umedComponents && window.umedComponents.confirm
-      ? await window.umedComponents.confirm(
-          `Delete ${nounLabel} "${data ? data.title : info.key}"? This permanently removes its folder from disk and cannot be undone.`,
-          { confirmLabel: "Delete", cancelLabel: "Cancel" }
-        )
+      ? await window.umedComponents.confirm(message, { confirmLabel: "Delete", cancelLabel: "Cancel" })
       : true;
     if (!confirmed) return;
 
@@ -2906,9 +2912,12 @@
       }
       await writeIndexFile(rootHandle);
 
-      delete window.umedAppContent[info.key];
-      dirtyKeys.delete(info.key);
-      savedSnapshots.delete(info.key);
+      const childPrefix = `${info.key}/`;
+      const isDeleted = key => key === info.key || key.startsWith(childPrefix);
+      Object.keys(window.umedAppContent).filter(isDeleted).forEach(key => { delete window.umedAppContent[key]; });
+      [...dirtyKeys].filter(isDeleted).forEach(key => dirtyKeys.delete(key));
+      [...savedSnapshots.keys()].filter(isDeleted).forEach(key => savedSnapshots.delete(key));
+      [...contentInfoByKey.keys()].filter(isDeleted).forEach(key => contentInfoByKey.delete(key));
 
       location.hash = nextHash;
     } catch (error) {
