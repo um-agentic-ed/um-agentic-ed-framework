@@ -106,8 +106,8 @@ Educational content is structured in hierarchical tree levels:
   - A Category has one or more Sections.
   - A Section uses the App's configured Slide Levels, as needed, or no Slide Levels when suppressed.
   - A Slide Level has zero or more Slides.
-- A Slide has a title and zero or more Blocks (Slide with no blocks are 
-  suppressed in the UI).
+- A Slide has a title and zero or more Blocks (Slides with no visible content, as
+  defined under Routing, are suppressed in the UI).
 - A nested Subject, Category, Section, and Slide define the hierarchical path to 
   one content unit in the App and its associated files. In contrast, Level is a 
   Slide attribute helps organize Slide navigation within a Section, and all 
@@ -230,8 +230,14 @@ the App's identity or branding:
     hash `#/` is read from `/src/content/app-overview.js`. This landing Slide also
     lists links to all Subjects when Subjects are enabled.
 - An invalid route displays the Framework's built-in, non-editable error view.
-- In Learner and Presenter Modes, a Slide whose `content.blocks` array is empty is
-  skipped rather than rendered. Empty landing and content Slides remain present
+- In Learner and Presenter Modes, a Slide with no visible content is skipped
+  rather than rendered. A Slide has visible content when at least one block is
+  one of `image`, `link`, `dataFile`, `switchboard`, `widget`, `question`,
+  `gptFollowup`, or an unrecognized type; a `text` block whose `markdown` has a
+  non-whitespace character; or, on a Category or Section landing Slide, a
+  `trustedSources` block with at least one entry that renders a link (valid
+  HTTP(S) `url`). `divider` and `instructions` blocks never count. Editors are
+  expected to remove empty blocks of the always-counted types. Empty landing and content Slides remain present
   and directly accessible in Editor Mode so Editors can restore their content or
   manage their hierarchy.
 
@@ -569,6 +575,11 @@ type-specific fields:
     `/build-app generate-content <category-path>`.
   - The Agent uses all retained instructions blocks in order and leaves them
     unchanged unless explicitly asked to remove them.
+  - Slides may be specified three ways: created by the Editor in the app; listed
+    in `app-outline.xlsx` and **created** empty (with transferred `instructions`)
+    by `/build-app fill-app-outline`, which never invents unlisted Slides and does
+    not **generate** content unless its brief explicitly authorizes it; or invented
+    and populated by `generate-content` from Category or Section instructions.
 - `trustedSources` block: a Category- or Section-landing-only block stored in
   `category.js` or `section.js`, with a `files` array of objects containing
   `file`, `url`, and `label` strings. `file` names a local context file in that

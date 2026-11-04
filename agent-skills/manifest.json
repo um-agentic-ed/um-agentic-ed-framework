@@ -15,7 +15,7 @@
     },
     {
       "name": "fill-app-outline",
-      "description": "Generate missing tree levels and landing slides from app-outline.xlsx.",
+      "description": "Create the content tree, landing slides, and outline-listed empty slides from app-outline.xlsx.",
       "argumentHint": "",
       "file": "fill-app-outline.md"
     },

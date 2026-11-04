@@ -8,6 +8,10 @@ Invoke this skill after an Editor has added Agent instructions to one or more
 can generate or revise content within one Category, one Section, or one Slide.
 It may organize or create child Slides when the selected scope permits, but may
 remove a Slide only when the saved instructions explicitly request removal.
+Slides already created from `app-outline.xlsx` by `fill-app-outline` are ordinary
+Slides here: this skill never reads the outline, and takes everything it needs from
+the content tree, saved instructions, and other Slide fields. It populates such
+empty Slides and may add further Slides the saved brief calls for.
 
 Follow the slash command with the target in either form:
 

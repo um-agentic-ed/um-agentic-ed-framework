@@ -750,15 +750,33 @@
     return promise;
   }
 
-  const hasBlocks = data => Boolean(
-    data && data.content && Array.isArray(data.content.blocks) && data.content.blocks.length
-  );
+  // Block types whose presence alone is meaningful content, and types that never are. Any
+  // other type is treated as content so unrecognized or future types are not silently suppressed.
+  const NEVER_CONTENT_BLOCK_TYPES = new Set(["divider", "instructions"]);
+  const TRUSTED_SOURCE_LANDING_KINDS = new Set(["category", "section"]);
+
+  // Short-circuits on the first block that renders visible content; `kind` is the navigation
+  // target kind, because trustedSources links render only on Category and Section landing Slides.
+  function hasVisibleContent(data, kind) {
+    const blocks = data && data.content && data.content.blocks;
+    if (!Array.isArray(blocks)) return false;
+    return blocks.some(block => {
+      if (!block || typeof block !== "object") return false;
+      if (NEVER_CONTENT_BLOCK_TYPES.has(block.type)) return false;
+      if (block.type === "text") return typeof block.markdown === "string" && /\S/.test(block.markdown);
+      if (block.type === "trustedSources") {
+        return TRUSTED_SOURCE_LANDING_KINDS.has(kind) && trustedSourceLinks([block]).length > 0;
+      }
+      return true;
+    });
+  }
 
   // A hidden Slide remains fully available in Learner and Editor Modes. Presenter Mode alone
   // treats it like an empty Slide so direct routes and every navigation control use the same
   // existing skip behavior. Only the literal boolean true hides a Slide; omitted legacy fields
   // and other falsey values remain visible.
-  const isVisibleSlide = data => hasBlocks(data) && (!presenterModeActive || data.hidden !== true);
+  const isVisibleSlide = (data, kind) =>
+    hasVisibleContent(data, kind) && (!presenterModeActive || data.hidden !== true);
 
   async function findVisibleTarget(target, direction = 1) {
     const pages = allPages();
@@ -767,7 +785,7 @@
     for (let position = start; position >= 0 && position < pages.length; position += direction) {
       const candidate = pages[position];
       const data = await loadTargetContent(candidate);
-      if (isVisibleSlide(data)) return candidate;
+      if (isVisibleSlide(data, candidate.kind)) return candidate;
     }
     return null;
   }
@@ -895,7 +913,7 @@
       const sectionCounts = sorted(category.sections).map(section => {
         const count = Promise.all(sorted(section.slides).map(slide =>
           loadTargetContent({ kind: "slide", subject, category, section, slide })
-            .then(data => hasBlocks(data) && data.hidden !== true)
+            .then(data => hasVisibleContent(data, "slide") && data.hidden !== true)
             .catch(error => {
               console.warn(`Could not check Presenter eligibility for Slide "${slide.title}".`, error);
               return false;
@@ -1648,9 +1666,10 @@
     elements.slide.append(heading, message);
   }
 
-  function renderTrustedSources(blocks, parent, scopeName) {
-    const sources = blocks
-      .filter(block => block.type === "trustedSources" && Array.isArray(block.files))
+  // The sources a landing Slide would show to Learners; entries without a valid HTTP(S) URL are omitted.
+  function trustedSourceLinks(blocks) {
+    return blocks
+      .filter(block => block && block.type === "trustedSources" && Array.isArray(block.files))
       .flatMap(block => block.files)
       .map(entry => typeof entry === "object" && entry ? {
         url: String(entry.url || "").trim(),
@@ -1665,6 +1684,10 @@
           return false;
         }
       });
+  }
+
+  function renderTrustedSources(blocks, parent, scopeName) {
+    const sources = trustedSourceLinks(blocks);
     if (!sources.length) return;
 
     const wrapper = document.createElement("section");
